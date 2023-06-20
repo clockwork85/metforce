@@ -1,0 +1,53 @@
+[required]
+latitude = 39.1
+longitude = -98.3
+elevation = 450
+start_range = "2020-01-27 00:00"
+end_range = "2020-01-27 06:00"
+
+[optional]
+outfile = "test.met"
+metfile = "data/Yuma_Testing.xlsx"
+# https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases
+# 5 minutes
+metstation_freq = "5T"
+location_name = "Yuma Providing Grounds"
+# tmp_grib_folder = "/path/to/grib_files"
+# cleanup_folder = false
+# freq = "2H"
+# pull_grib = true
+
+# Source models for parameters - these default to met (except for zenith and azimuth which default to pvlib)
+# Key is where it is found in the met file - these default to the standard names we use but are overridden here
+[parameters]
+[parameters.pressure]
+source = "grib"
+[parameters.temperature]
+source = "met"
+key = "AirT_2M"
+[parameters.relative_humidity]
+source = "grib"
+[parameters.wind_speed]
+source = "met"
+key = "Wind_Spd_2M"
+[parameters.wind_direction]
+source = "met"
+[parameters.precipitation]
+source = "met"
+key = "Precip_Tot"
+[parameters.global_shortwave]
+source = "met"
+key = "Global"
+[parameters.direct_shortwave]
+source = "met"
+key = "Direct"
+[parameters.diffuse_shortwave]
+source = "met"
+key = "Diffuse"
+#[parameters.downwelling_lwir]
+#source = "met"
+#key = "PIR_Flux"
+[parameters.zenith]
+source = "pvlib"
+[parameters.azimuth]
+source = "pvlib"
