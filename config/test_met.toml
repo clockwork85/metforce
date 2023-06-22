@@ -7,7 +7,7 @@ end_range = "2020-01-27 06:00"
 
 [optional]
 outfile = "test.met"
-# metfile = "data/Yuma_Testing.xlsx"
+metfile = "data/Yuma_Testing.xlsx"
 # https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases
 # 5 minutes
 metstation_freq = "5T"
@@ -21,7 +21,7 @@ location_name = "Yuma Providing Grounds"
 # Key is where it is found in the met file - these default to the standard names we use but are overridden here
 [parameters]
 [parameters.pressure]
-source = "grib"
+source = "met"
 [parameters.temperature]
 source = "grib"
 #key = "AirT_2M"
