@@ -1,11 +1,17 @@
-from datetime import datetime
 import pandas as pd
+import pytest
 import numpy as np
+from unittest.mock import MagicMock
+
 
 from metforce import (
     check_for_missing_dates,
     fill_in_missing_metdata,
     get_solar_positions,
+)
+
+from metforce_grib import (
+    get_relative_humidity_grib
 )
 
 
@@ -170,3 +176,27 @@ def test_fill_in_missing_metdata_interpolation():
     # Check the temperature values
     expected_temp = [20, 21, 22, 23]
     assert np.allclose(result["temperature"].values, expected_temp, atol=1e-5)
+
+def test_get_relative_humidity_grib(mocker):
+    # Predefined values for specific humidity, temperature, and pressure
+    gid_list = [None, None, None]  # Replace with actual gid_list
+    latitude = 0.0  # Replace with actual latitude
+    longitude = 0.0  # Replace with actual longitude
+
+    # Mocking the functions get_temperature_grib and get_pressure_grib
+    mocker.patch('metforce_grib.get_temperature_grib', return_value=20.0)  # Temperature in Celsius
+    mocker.patch('metforce_grib.get_pressure_grib', return_value=1013.25 / 1000.0)  # Pressure in hPa
+
+    # Mocking the function eccodes.codes_grib_find_nearest to return a predefined specific humidity
+    nearest_mock = MagicMock()
+    nearest_mock.value = 0.00763  # Specific humidity (dimensionless)
+    mocker.patch('eccodes.codes_grib_find_nearest', return_value=[nearest_mock])
+
+    # Expected relative humidity based on the predefined values
+    expected_relative_humidity = 0.5 * 100.0 # Relative humidity (50%)
+
+    # Call the function with the predefined values
+    relative_humidity = get_relative_humidity_grib(gid_list, latitude, longitude)
+
+    # Assert that the returned relative humidity is equal to the expected relative humidity
+    assert relative_humidity == pytest.approx(expected_relative_humidity, 1)  # Tolerance of 1%

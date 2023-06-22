@@ -7,7 +7,7 @@ end_range = "2020-01-27 06:00"
 
 [optional]
 outfile = "test.met"
-metfile = "data/Yuma_Testing.xlsx"
+# metfile = "data/Yuma_Testing.xlsx"
 # https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases
 # 5 minutes
 metstation_freq = "5T"
@@ -23,29 +23,29 @@ location_name = "Yuma Providing Grounds"
 [parameters.pressure]
 source = "grib"
 [parameters.temperature]
-source = "met"
-key = "AirT_2M"
+source = "grib"
+#key = "AirT_2M"
 [parameters.relative_humidity]
 source = "grib"
 [parameters.wind_speed]
-source = "met"
-key = "Wind_Spd_2M"
+source = "grib"
+#key = "Wind_Spd_2M"
 [parameters.wind_direction]
-source = "met"
+source = "grib"
 [parameters.precipitation]
-source = "met"
-key = "Precip_Tot"
+source = "grib"
+#key = "Precip_Tot"
 [parameters.global_shortwave]
-source = "met"
-key = "Global"
+source = "grib"
+#key = "Global"
 [parameters.direct_shortwave]
-source = "met"
-key = "Direct"
+source = "global_80%"
+#key = "Direct"
 [parameters.diffuse_shortwave]
-source = "met"
-key = "Diffuse"
-#[parameters.downwelling_lwir]
-#source = "met"
+source = "global_20%"
+#key = "Diffuse"
+[parameters.downwelling_lwir]
+source = "grib"
 #key = "PIR_Flux"
 [parameters.zenith]
 source = "pvlib"

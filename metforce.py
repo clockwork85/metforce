@@ -24,6 +24,7 @@ class Source(Enum):
     GRIB = "grib"
     MET = "met"
     PVLIB = "pvlib"
+    GLOBAL = "global"
 
 # GRIB helper function
 def get_grib_dates(metdata: pd.DataFrame, parameters: Dict[str, Dict], date_range: pd.DatetimeIndex,
@@ -89,6 +90,7 @@ def get_azimuth_pvlib(
     solpos = get_solar_positions(year, julian_day, hour, minute, latitude, longitude)
     return solpos[1][0]
 
+
 pvlib_parameter_map = {
     "zenith": get_zenith_pvlib,
     "azimuth": get_azimuth_pvlib,
@@ -119,6 +121,25 @@ def build_pvlib_df(parameters: List[str], date_range: pd.DatetimeIndex, latitude
         raise KeyError(f"The following parameters are not supported by any pvlib functions: {missing_parameters}")
     pvlib_df = pd.DataFrame(parameter_series_dict)
     return pvlib_df
+
+def build_global_df(
+        parameters: Dict[str, Dict],
+        date_range: pd.DatetimeIndex,
+        global_shortwave: pd.Series
+) -> pd.DataFrame:
+
+    logger.trace(f"From build_global_df: {parameters=}")
+    logger.trace(f"Global shortwave: {global_shortwave=}")
+    global_dict = {}
+    for parameter, fraction in parameters.items():
+        global_dict[parameter] = global_shortwave * fraction
+
+    if len(global_dict) != len(parameters):
+        missing_parameters = set(parameters) - set(global_dict.keys())
+        raise KeyError(f"The following parameters are not supported by any pvlib functions: {missing_parameters}")
+
+    return pd.DataFrame(global_dict, index=date_range)
+
 
 # Helper functions
 def julian_to_datetime(year: int, julian_date: int) -> datetime:
@@ -183,24 +204,23 @@ def read_metstation_data(metfile: str) -> pd.DataFrame:
     return metdata
 
 
-def merge_met_dataframes(parameters: Dict[str, Dict[str, str]], dataframes: pd.DataFrame) -> pd.DataFrame:
-    merged_df = pd.DataFrame(index=dataframes[0].index, columns=parameters)
+def merge_met_dataframes(parameters: Dict[str, Dict[str, str]], dataframes: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+    # Get first dataframe to use as index
+    index = list(dataframes.values())[0].index
+    merged_df = pd.DataFrame(index=index, columns=parameters)
+    logger.trace(f"Parameters from merge_met_dataframes: {parameters}")
+    logger.trace(f"Parameters from merge_met_dataframes: {type(parameters)}")
     for parameter in parameters.keys():
-        parameter_found = False
         source = parameters[parameter]['source']
-        for df in dataframes:
-            try:
-                logger.trace(f"Trying to merge {parameter} from {source}")
-                merged_df[parameter] = df[parameter]
-                parameter_found = True
-            except KeyError:
-                logger.trace(f"Parameter {parameter} not found in dataframe {source}")
-                continue
-        if not parameter_found:
-            for df in dataframes.keys():
-                logger.error(f"Dataframe {source} has the following columns: {df.columns}")
-            raise KeyError(f"Parameter {parameter} not found in any of the dataframes.")
+        df = dataframes[source]
+        try:
+            logger.trace(f"Trying to merge {parameter} from {source}")
+            merged_df[parameter] = df[parameter]
+        except KeyError as e:
+            logger.trace(f"Parameter {parameter} not found in dataframe {source}")
+            raise e
     return merged_df
+
 
 def build_metstation_df(met_key: Dict[str, str], metdata: pd.DataFrame, date_range: List[datetime.datetime]) \
         -> pd.DataFrame:
@@ -272,9 +292,9 @@ def write_met_data(met_df: pd.DataFrame, outfile: str, header: str, parameters: 
 
         # Write the sources
         for col in met_df.columns:
-            if col is 'day':
+            if col == 'day':
                 f.write('# Sources - ')
-            elif col is 'hour' or col is 'minute':
+            elif col == 'hour' or col == 'minute':
                 continue
             else:
                 source = parameters.get(col, {}).get('source', '-')
@@ -293,8 +313,6 @@ def write_met_data(met_df: pd.DataFrame, outfile: str, header: str, parameters: 
             f.write('\n')
 
 
-
-
 def process_met(latitude: float,
                 longitude: float,
                 elevation: float,
@@ -311,7 +329,7 @@ def process_met(latitude: float,
                 parameters: Dict[str, Dict[str, str]],
                 metdata: Optional[pd.DataFrame] = None,
                 ) -> pd.DataFrame:
-    dataframes = []
+    dataframes = {}
     # Create the date range based on the start and end range and the frequency
     date_range = get_date_range(start_range, end_range, freq)
 
@@ -331,8 +349,9 @@ def process_met(latitude: float,
     else:
         metstation_df = None
 
-    logger.trace(f"{metstation_df.head()=}")
-    dataframes.append(metstation_df)
+    if metstation_df is not None:
+        logger.trace(f"{metstation_df.head()=}")
+        dataframes[Source.MET.value] = metstation_df
 
     # Go through the many cases where we might want to pull GRIB files
     grib_dates = get_grib_dates(metdata, parameters, date_range, interp_method, pull_grib)
@@ -345,7 +364,8 @@ def process_met(latitude: float,
         logger.trace(f"{grib_df=}")
     else:
         grib_df = None
-    dataframes.append(grib_df)
+    if grib_df is not None:
+        dataframes[Source.GRIB.value] = grib_df
 
     # Build pvlib dataframe
     pvlib_parameters = [key for key in parameters.keys() if parameters[key]['source'] == 'pvlib']
@@ -356,7 +376,34 @@ def process_met(latitude: float,
     else:
         pvlib_df = None
 
-    dataframes.append(pvlib_df)
+    if pvlib_df is not None:
+        dataframes[Source.PVLIB.value] = pvlib_df
+
+    global_parameters = [key for key in parameters.keys() if parameters[key]['source'].startswith('global')]
+    logger.trace(f"{global_parameters=}")
+
+    if global_parameters:
+        global_parameters = {}
+        # Replace global_*% with global in the parameters
+        for key in parameters.keys():
+            if parameters[key]['source'].startswith('global'):
+                fraction = float(parameters[key]['source'].split('_')[1][:-1]) / 100.0
+                parameters[key]['source'] = 'global'
+                global_parameters[key] = fraction
+        logger.trace(f"{global_parameters=}")
+        global_source = parameters['global_shortwave']['source']
+        global_shortwave = dataframes[global_source]['global_shortwave']
+        global_df = build_global_df(global_parameters, date_range, global_shortwave)
+    else:
+        global_df = None
+
+    if global_df is not None:
+        logger.trace(f"{global_df=}")
+        dataframes[Source.GLOBAL.value] = global_df
+
+
+    # Remove the dataframe keys whose values are None
+    dataframes = {key: value for key, value in dataframes.items() if value is not None}
 
     # Build the new dataframe with the DateTimes as the index to add columns to
     met_df = merge_met_dataframes(parameters, dataframes)
@@ -375,12 +422,9 @@ def process_met(latitude: float,
     met_df = met_df[list(default_col_names.keys())]
     logger.trace(f"{met_df=}")
 
+    logger.trace(f"{met_df.relative_humidity=}")
     # Write the dataframe to the output file
     write_met_data(met_df, outfile, header, parameters)
-
-
-
-
 
 
 if __name__ == "__main__":
@@ -389,6 +433,7 @@ if __name__ == "__main__":
     if config.optional.metfile:
         metdata = read_metstation_data(config.optional.metfile)
     else:
+        logger.trace("No metfile provided")
         metdata = None
     required = config.required
     optional = config.optional

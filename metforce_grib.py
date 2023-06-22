@@ -8,7 +8,21 @@ import urllib
 
 import eccodes
 from loguru import logger
+import numpy as np
 import pandas as pd
+
+class GID(Enum):
+    TMP_2M_ABOVE_GROUND_TEMPERATURE = 0
+    ABOVE_GROUND_SPECIFIC_HUMIDITY = 1
+    SURFACE_PRESSURE = 2
+    ABOVE_GROUND_ZONAL_WIND_SPEED = 3
+    ABOVE_GROUND_MERIDIONAL_WIND_SPEED = 4
+    LW_RADIATION_FLUX_DOWNWARDS = 5
+    FRACTION_OF_TOTAL_PRECIPITATION_CONV = 6
+    POTENTIAL_ENERGY = 7
+    POTENTIAL_EVAPORATION = 8
+    PRECIPITATION_HOURLY_TOTAL = 9
+    SW_RADIATION_FLUX_DOWNWARDS = 10
 
 
 def get_pressure_grib(gid_list: List, latitude: float, longitude: float) -> float:
@@ -30,31 +44,85 @@ def get_temperature_grib(gid_list: List, latitude: float, longitude: float) -> f
 def get_relative_humidity_grib(
     gid_list: List, latitude: float, longitude: float
 ) -> float:
-    # gid = gid_list[GID.ABOVE_GROUND_SPECIFIC_HUMIDITY.value]
-    # nearest = eccodes.codes_grib_find_nearest(gid, latitude, longitude)[0]
-    # relative_humidity = nearest.value
-    return 0.10
+    gid = gid_list[GID.ABOVE_GROUND_SPECIFIC_HUMIDITY.value]
+    temperature_celsius = get_temperature_grib(gid_list, latitude, longitude)
+    pressure_Pa = get_pressure_grib(gid_list, latitude, longitude) * 1000.0
+    nearest = eccodes.codes_grib_find_nearest(gid, latitude, longitude)[0]
+    specific_humidity = nearest.value
+    # Saturation vapour pressure in hPa
+    es = 6.112 * np.exp(17.67 * temperature_celsius / (temperature_celsius + 243.5))
+    es = es * 100.0 # Convert to Pa
+    # Vapor pressure in hPa
+    e = specific_humidity * pressure_Pa / (0.622 + (0.378 * specific_humidity))
+    relative_humidity = e / es
+    return relative_humidity * 100.0
+
+def get_zonal_wind_speed_grib(gid_list: List, latitude: float, longitude: float) -> float:
+    gid = gid_list[GID.ABOVE_GROUND_ZONAL_WIND_SPEED.value]
+    nearest = eccodes.codes_grib_find_nearest(gid, latitude, longitude)[0]
+    zonal_wind_speed = nearest.value
+    return zonal_wind_speed
+
+def get_meridional_wind_speed_grib(gid_list: List, latitude: float, longitude: float) -> float:
+    gid = gid_list[GID.ABOVE_GROUND_MERIDIONAL_WIND_SPEED.value]
+    nearest = eccodes.codes_grib_find_nearest(gid, latitude, longitude)[0]
+    meridional_wind_speed = nearest.value
+    return meridional_wind_speed
+def get_wind_speed_grib(gid_list: List, latitude: float, longitude: float, surface_roughness: float=0.34) -> float:
+    zonal_wind_speed = get_zonal_wind_speed_grib(gid_list, latitude, longitude)
+    meridional_wind_speed = get_meridional_wind_speed_grib(gid_list, latitude, longitude)
+
+    wind_speed_10m = np.sqrt(zonal_wind_speed**2 + meridional_wind_speed**2)
+    wind_speed_2m = wind_speed_10m * np.log(2/surface_roughness) / np.log(10/surface_roughness)
+
+    return wind_speed_2m
+
+def get_wind_direction(gid_list: List, latitude: float, longitude: float) -> float:
+    zonal_wind_speed = get_zonal_wind_speed_grib(gid_list, latitude, longitude)
+    meridional_wind_speed = get_meridional_wind_speed_grib(gid_list, latitude, longitude)
+
+    if zonal_wind_speed == 0 and meridional_wind_speed == 0:
+        return 0
+    elif zonal_wind_speed != 0:
+        wind_direction = np.degrees(np.arctan2(zonal_wind_speed, meridional_wind_speed))
+    else:
+        wind_direction = np.degrees(np.pi/2.0*(meridional_wind_speed/np.abs(meridional_wind_speed)))
+
+    if wind_direction < 0:
+        wind_direction = wind_direction + 360.0
+
+    return wind_direction
+
+def get_shortwave_radiation(gid_list: List, latitude: float, longitude: float) -> float:
+    gid = gid_list[GID.SW_RADIATION_FLUX_DOWNWARDS.value]
+    nearest = eccodes.codes_grib_find_nearest(gid, latitude, longitude)[0]
+    shortwave_radiation = nearest.value
+    return shortwave_radiation
+
+def get_longwave_radiation(gid_list: List, latitude: float, longitude: float) -> float:
+    gid = gid_list[GID.LW_RADIATION_FLUX_DOWNWARDS.value]
+    nearest = eccodes.codes_grib_find_nearest(gid, latitude, longitude)[0]
+    longwave_radiation = nearest.value
+    return longwave_radiation
+
+def get_precipitation(gid_list: List, latitude: float, longitude: float) -> float:
+    gid = gid_list[GID.PRECIPITATION_HOURLY_TOTAL.value]
+    nearest = eccodes.codes_grib_find_nearest(gid, latitude, longitude)[0]
+    precipitation = nearest.value
+    return precipitation
 
 
 grib_function_mapper = {
     "pressure": get_pressure_grib,
     "temperature": get_temperature_grib,
     "relative_humidity": get_relative_humidity_grib,
+    "precipitation": get_precipitation,
+    "wind_speed": get_wind_speed_grib,
+    "wind_direction": get_wind_direction,
+    "global_shortwave": get_shortwave_radiation,
+    "downwelling_lwir": get_longwave_radiation,
 }
 
-
-class GID(Enum):
-    TMP_2M_ABOVE_GROUND_TEMPERATURE = 0
-    ABOVE_GROUND_SPECIFIC_HUMIDITY = 1
-    SURFACE_PRESSURE = 2
-    ABOVE_GROUND_ZONAL_WIND_SPEED = 3
-    ABOVE_GROUND_MERIDIONAL_WIND_SPEED = 4
-    LW_RADIATION_FLUX_DOWNWARDS = 5
-    FRACTION_OF_TOTAL_PRECIPITATION_CONV = 6
-    POTENTIAL_ENERGY = 7
-    POTENTIAL_EVAPORATION = 8
-    PRECIPITATION_HOURLY_TOTAL = 9
-    SW_RADIATION_FLUX_DOWNWARDS = 10
 
 
 def retrieve_gid_list(gribfile: str) -> List:
