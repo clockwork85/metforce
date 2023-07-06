@@ -1,6 +1,5 @@
 import datetime
 from enum import Enum
-from pathlib import Path
 import sys
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -17,7 +16,7 @@ from metforce_grib import build_grib_df, pull_grib_files
 # Set to DEBUG for more verbose logging
 # Set to TRACE for even more verbose logging
 logger.remove()
-logger.add(sys.stderr, level="TRACE")
+logger.add(sys.stderr, level="DEBUG")
 
 
 class Source(Enum):
@@ -251,6 +250,7 @@ def fill_in_missing_metdata(metdata: pd.DataFrame, met_key: Dict[str, str], date
 
 # Read Met Data
 def read_metstation_data(metfile: str) -> pd.DataFrame:
+    logger.info(f"Reading metstation data from {metfile}")
     utc = pytz.UTC
     metdata = pd.read_excel(metfile, skiprows=[1], index_col=0)
     metdata.tz_localize(utc)
@@ -389,119 +389,6 @@ def write_met_data(met_df: pd.DataFrame, outfile: str, header: str, parameters: 
             f.write('\n')
 
 
-# def process_met(latitude: float,
-#                 longitude: float,
-#                 elevation: float,
-#                 start_range: str,
-#                 end_range: str,
-#                 outfile: str,
-#                 tmp_grib_folder: str,
-#                 cleanup_folder: bool,
-#                 location_name: str,
-#                 freq: str,
-#                 pull_grib: bool,
-#                 interp_method: Union[None, str],
-#                 metstation_freq: str,
-#                 parameters: Dict[str, Dict[str, str]],
-#                 metdata: Optional[pd.DataFrame] = None,
-#                 ) -> pd.DataFrame:
-#     dataframes = {}
-#     # Create the date range based on the start and end range and the frequency
-#     date_range = get_date_range(start_range, end_range, freq)
-#
-#     # Create key with met parameters mapped to the key in the metdata dataframe
-#     met_key = {key: value["key"] for key, value in parameters.items() if value["source"] == "met"}
-#
-#     logger.trace(f"{met_key=}")
-#     # If met station data is provided, then check for missing dates and fill in the missing dates using interpolation
-#     if metdata is not None and interp_method is not None:
-#         metdata = fill_in_missing_metdata(metdata, met_key, date_range, metstation_freq, interp_method)
-#         logger.trace(f"{metdata[:50]=}")
-#         metstation_df = build_metstation_df(met_key, metdata, date_range)
-#     elif metdata is not None and interp_method is None:
-#         metstation_df = build_metstation_df(met_key, metdata, date_range)
-#     elif metdata is None and met_key:
-#         raise ValueError("No met station data provided to pull met parameters from")
-#     else:
-#         metstation_df = None
-#
-#     if metstation_df is not None:
-#         logger.trace(f"{metstation_df.head()=}")
-#         dataframes[Source.MET.value] = metstation_df
-#
-#     # Go through the many cases where we might want to pull GRIB files
-#     grib_dates = get_grib_dates(metdata, parameters, date_range, interp_method, pull_grib)
-#     grib_files_and_dates_dict = pull_grib_files(grib_dates, latitude, longitude, tmp_grib_folder, cleanup_folder)
-#     grib_parameters = [key for key in parameters.keys() if parameters[key]['source'] == 'grib']
-#
-#     # Build grib dataframe
-#     if grib_parameters:
-#         grib_df = build_grib_df(grib_parameters, grib_files_and_dates_dict, latitude, longitude)
-#         logger.trace(f"{grib_df=}")
-#     else:
-#         grib_df = None
-#     if grib_df is not None:
-#         dataframes[Source.GRIB.value] = grib_df
-#
-#     # Build pvlib dataframe
-#     pvlib_parameters = [key for key in parameters.keys() if parameters[key]['source'] == 'pvlib']
-#     logger.trace(f"{pvlib_parameters=}")
-#
-#     if pvlib_parameters:
-#         pvlib_df = build_pvlib_df(pvlib_parameters, date_range, latitude, longitude)
-#     else:
-#         pvlib_df = None
-#
-#     if pvlib_df is not None:
-#         dataframes[Source.PVLIB.value] = pvlib_df
-#
-#     global_parameters = [key for key in parameters.keys() if parameters[key]['source'].startswith('global')]
-#     logger.trace(f"{global_parameters=}")
-#
-#     if global_parameters:
-#         global_parameters = {}
-#         # Replace global_*% with global in the parameters
-#         for key in parameters.keys():
-#             if parameters[key]['source'].startswith('global'):
-#                 fraction = float(parameters[key]['source'].split('_')[1][:-1]) / 100.0
-#                 parameters[key]['source'] = 'global'
-#                 global_parameters[key] = fraction
-#         logger.trace(f"{global_parameters=}")
-#         global_source = parameters['global_shortwave']['source']
-#         global_shortwave = dataframes[global_source]['global_shortwave']
-#         global_df = build_global_df(global_parameters, date_range, global_shortwave)
-#     else:
-#         global_df = None
-#
-#     if global_df is not None:
-#         logger.trace(f"{global_df=}")
-#         dataframes[Source.GLOBAL.value] = global_df
-#
-#
-#     # Remove the dataframe keys whose values are None
-#     dataframes = {key: value for key, value in dataframes.items() if value is not None}
-#
-#     # Build the new dataframe with the DateTimes as the index to add columns to
-#     met_df = merge_met_dataframes(parameters, dataframes)
-#
-#     # Create the header for the output file
-#     header = create_header(location_name, latitude, longitude, elevation, start_range, end_range, freq)
-#     logger.trace(f"{header=}")
-#
-#     # Add unused columns to the dataframe like Visibility, Aerosol, Cloud Cover, etc.
-#     met_df = add_unused_columns(met_df)
-#
-#     # Add the date columns to the dataframe from the index
-#     met_df = add_date_columns(met_df)
-#
-#     # Reorder the columns to match the default column order
-#     met_df = met_df[list(default_col_names.keys())]
-#     logger.trace(f"{met_df=}")
-#
-#     logger.trace(f"{met_df.relative_humidity=}")
-#     # Write the dataframe to the output file
-#     write_met_data(met_df, outfile, header, parameters)
-
 # Function to merge dataframes and prepare for output
 def merge_and_prepare_for_output(parameters: Dict[str, Dict[str, str]], dataframes: Dict[str, pd.DataFrame],
                                  location_name: str, latitude: float, longitude: float,
@@ -569,7 +456,7 @@ def process_met_data(latitude: float,
 
 
 if __name__ == "__main__":
-    config = parse_config("config/test_met.toml")
+    config = parse_config(sys.argv[1])
     logger.debug(f"{config=}")
     if config.optional.metfile:
         metdata = read_metstation_data(config.optional.metfile)
