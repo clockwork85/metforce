@@ -2,10 +2,9 @@ from datetime import datetime
 from typing import Any, Optional, Dict
 
 from pydantic import BaseModel, Field, validator, root_validator
-from loguru import logger
 import toml
 
-from metforce_defaults import (
+from defaults import (
     default_met,
     default_met_keys,
     default_met_sources,
@@ -13,7 +12,7 @@ from metforce_defaults import (
     default_met_units,
     default_optional_met,
 )
-
+from logger_config import logger
 
 class RequiredConfig(BaseModel):
     """Required Metforce configuration parameters"""
@@ -132,12 +131,6 @@ class MetforceConfig(BaseModel):
                     f"Parameter {default_param} not in default met parameters, using default met parameters"
                 )
                 parameters[default_param] = default_met[default_param]
-
-        # Setting the default units for each parameter
-        # for param, default_unit in default_met_units.items():
-        #     logger.trace(f"Setting default unit for {param} to {default_unit}")
-        #     parameters[param]["unit"] = default_unit
-        #
 
         # Checking for source and key for each parameter - filling in defaults if not provided
         for param, settings in parameters.items():

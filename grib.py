@@ -7,9 +7,10 @@ from typing import Dict, List
 import urllib
 
 import eccodes
-from loguru import logger
 import numpy as np
 import pandas as pd
+
+from logger_config import logger
 
 class GID(Enum):
     TMP_2M_ABOVE_GROUND_TEMPERATURE = 0
