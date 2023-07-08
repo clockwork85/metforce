@@ -1,0 +1,9 @@
+name: metforce
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - eccodes
+  - pip
+prefix: /Users/rdgslmdb/anaconda3/envs/metforce

@@ -10,7 +10,7 @@ from metforce import (
     get_solar_positions,
 )
 
-from grib import (
+from metforce.processing.grib import (
     get_relative_humidity_grib
 )
 

@@ -30,49 +30,7 @@ def process_grib_data(parameters: Dict[str, Dict[str, str]], metdata: pd.DataFra
         grib_df = None
     return grib_df
 
-# Function for Met Station data processing
-def process_met_station_data(parameters: Dict[str, Dict[str, str]], metdata: Optional[pd.DataFrame],
-                             date_range: pd.DatetimeIndex, metstation_freq: str, interp_method: Optional[str]) \
-        -> Optional[pd.DataFrame]:
 
-    if metdata is None:
-        logger.debug("No met station data provided")
-        return None
-
-    met_key = {key: value["key"] for key, value in parameters.items() if value["source"] == "met"}
-
-    if metdata is not None:
-        if interp_method is not None:
-            metdata = fill_in_missing_metdata(metdata, met_key, date_range, metstation_freq, interp_method)
-            logger.trace(f"{metdata[:50]=}")
-        metstation_df = build_metstation_df(met_key, metdata, date_range)
-        logger.trace(f"{metstation_df[:50]=}")
-    elif met_key:
-        raise ValueError("No met station data provided to pull met parameters from")
-    else:
-        metstation_df = None
-    return metstation_df
-
-def build_metstation_df(met_key: Dict[str, str], metdata: pd.DataFrame, date_range: List[datetime.datetime]) \
-        -> pd.DataFrame:
-
-    met_station_df = pd.DataFrame(index=date_range)
-
-    for parameter, key in met_key.items():
-        if key in metdata.columns:
-            try:
-                met_station_df[parameter] = metdata.loc[met_station_df.index, key]
-            except KeyError as e:
-                if "DatetimeIndex" in str(e):
-                    logger.error(
-                        "Time mismatch error: The time index in the dataframe does not match the time index you are trying to assign.")
-                    logger.error(f"Met Data Start: {metdata.index.min()}, End: {metdata.index.max()}")
-                    logger.error(f"Your Start: {met_station_df.index.min()}, End: {met_station_df.index.max()}")
-                    logger.error(f"{metdata[:50]=}")
-                else:
-                    logger.error(f"Key error: The key '{key}' does not exist in the dataframe.")
-                raise e
-    return met_station_df
 
 # Function for PVLib data processing
 def process_pvlib_data(parameters: Dict[str, Dict[str, str]], date_range: pd.DatetimeIndex,
