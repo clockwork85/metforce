@@ -4,15 +4,15 @@ from typing import Any, Optional, Dict
 from pydantic import BaseModel, Field, validator, root_validator
 import toml
 
-from data_types import Parameters
-from defaults import (
+from metforce.data_types import Parameters
+from metforce.defaults import (
     default_met,
     default_met_keys,
     default_met_sources,
     default_met_grib,
     default_optional_met,
 )
-from logger_config import logger
+from metforce.logger_config import logger
 
 class RequiredConfig(BaseModel):
     """Required Metforce configuration parameters"""

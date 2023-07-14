@@ -91,3 +91,11 @@ the met station data (this can be changed in the configuration toml file based o
 ## Configuration
 
 For more details on the configuration file, please refer to the [CONFIGURATION.md](CONFIGURATION.md) file.
+
+## Usage
+
+After installing MetForce and creating a toml configuration file, you can run MetForce using the following command:
+
+```bash
+metforce.py /path/to/config.toml
+```
