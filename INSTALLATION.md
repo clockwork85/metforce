@@ -43,3 +43,6 @@ pip install .
 ```
 
 This command installs the `metforce` package and all of its dependencies.
+
+## Usage
+See the [README.md](README.md) file for usage instructions.
