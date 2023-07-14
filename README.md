@@ -16,7 +16,7 @@ Please follow the instructions provided in the [INSTALLATION.md](INSTALLATION.md
 
 Data generation primarily comes from two sources:
 
-1. **Meteorological weather stations:** Data from local weather stations provide a rich source of detailed and accurate meteorological data.
+1. **Meteorological weather stations:** Data from local weather stations provide detailed and accurate meteorological data.
 
 2. **NASA NLDAS Data:** The North American Land Data Assimilation System (NLDAS) is a collaboration project between NASA and several other organizations to provide high-quality, high-resolution data on various environmental and meteorological variables over North America in GRIB formatted files.
 
@@ -26,7 +26,7 @@ All these data sources and their specifics are controlled using a `.toml` config
 
 ## Features
 
-* **Versatile Data Source Mapping:** MetForce allows each column to be assigned to a different data source (e.g., grib files, met stations, pvlib, derived from another column, or a custom source). This versatility allows you to create rich and comprehensive datasets, which incorporate the best-available data from a variety of sources. 
+* **Versatile Data Source Mapping:** MetForce allows each column to be assigned to a different data source (e.g., grib files, met stations, pvlib, derived from another column, or a custom source). This versatility allows you to create comprehensive datasets, which incorporate the best-available data from a variety of sources. 
 
 * **Flexible Interpolation:** Utilizing the power of pandas DataFrames, MetForce lets you apply any pandas-based interpolation on the input data. The default is time interpolation, a form of linear interpolation considering time, but you can use any method that fits your specific needs.
 
