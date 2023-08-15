@@ -9,9 +9,14 @@ Parameters = Dict[str, Dict[str, Any]]
 def create_header(location_name: str, latitude: float, longitude: float, elevation: float, start_range: str, end_range: str, freq: str) -> str:
     if location_name is None:
         location_name = "Location"
+
+    # Parse the start_range string using the provided format to get the year
+    start_date = datetime.strptime(start_range, "%Y-%m-%d %H:%M")
+    year = start_date.year
+
     header = f"{location_name} Met Data from {start_range} to {end_range} at {freq} resolution\n"
-    header += f"Elevation(m), Latitude, Longitude, GMT-UTC\n"
-    header += f"{elevation}, {latitude}, {longitude}, 0\n"
+    header += f"Elevation(m), Latitude, Longitude, GMT-UTC, Year\n"
+    header += f"{elevation}, {latitude}, {longitude}, 0, {year}\n"
     return header
 
 

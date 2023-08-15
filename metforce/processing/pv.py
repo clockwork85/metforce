@@ -33,7 +33,11 @@ def get_solar_positions(
 
     date_utc = date.replace(tzinfo=pytz.UTC)
 
-    solpos = pvlib.solarposition.get_solarposition(date_utc, latitude, longitude)
+    location = pvlib.location.Location(latitude, longitude, tz='UTC')
+
+    solpos = location.get_solarposition(date_utc)
+
+    # solpos = pvlib.solarposition.get_solarposition(date_utc, latitude, longitude)
 
     return solpos["zenith"], solpos["azimuth"]
 
