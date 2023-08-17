@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
-import sys
+#import sys
 from typing import Dict, Optional, Tuple
 
+import argparse
 import pandas as pd
 
 from metforce.config import parse_config
 from metforce.data_types import Parameters
-from metforce.logger_config import logger
+from metforce.logger_config import logger, set_loglevel
 from metforce.processing.metstation import read_metstation_data
 from metforce.output import create_header, write_met_data
 from metforce.processing import merge_and_prepare_for_output
@@ -58,7 +59,14 @@ def process_met_data(latitude: float,
 
 
 if __name__ == "__main__":
-    config = parse_config(sys.argv[1])
+    parser = argparse.ArgumentParser(description="Metforce takes a config file, and -v for debug logging, and -vv for trace level logging. Info level logging by default.")
+    parser.add_argument('config', type=str, help="The toml configuration file.")
+    parser.add_argument("-v", "--verbosity", action="count", default=0, help="Set logging level (e.g., -v for DEBUG, -vv for TRACE)")
+
+    args = parser.parse_args()
+    set_loglevel(args.verbosity)
+    config = parse_config(args.config)
+
     logger.debug(f"{config=}")
     required = config.required
     optional = config.optional
