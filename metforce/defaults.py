@@ -7,7 +7,7 @@ default_optional_met = {
     "tmp_grib_folder": "~/tmp_grib_folder",
     "cleanup_folder": False,
     "freq": "1H",
-    "pull_grib": True,
+    "pull_grib": False,
     "interp_method": "time",
 }
 

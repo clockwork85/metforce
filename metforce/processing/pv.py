@@ -95,5 +95,6 @@ def build_pvlib_df(parameters: List[str], date_range: pd.DatetimeIndex, latitude
         missing_parameters = set(parameters) - set(parameter_series_dict.keys())
         raise KeyError(f"The following parameters are not supported by any pvlib functions: {missing_parameters}")
     pvlib_df = pd.DataFrame(parameter_series_dict)
+    logger.info(f"PVLib dataframe built with parameters: {', '.join((pvlib_df.columns.tolist())).rstrip(', ')}")
     return pvlib_df
 

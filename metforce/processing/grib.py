@@ -31,10 +31,13 @@ class GID(Enum):
 def process_grib_data(parameters: Parameters, metdata: pd.DataFrame, date_range: pd.DatetimeIndex,
                       latitude: float, longitude: float, tmp_grib_folder: str, pull_grib: bool, cleanup_folder: bool,
                       interp_method: Optional[str] = None) -> Optional[pd.DataFrame]:
-
+    if not pull_grib:
+        return None
     grib_dates = get_grib_dates(metdata, parameters, date_range, interp_method, pull_grib)
     grib_files_and_dates_dict = pull_grib_files(grib_dates, latitude, longitude, tmp_grib_folder, cleanup_folder)
     grib_parameters = [key for key in parameters.keys() if parameters[key]['source'] == 'grib']
+
+    logger.trace(f"{grib_parameters=}")
 
     if grib_parameters:
         grib_df = build_grib_df(grib_parameters, grib_files_and_dates_dict, latitude, longitude)
@@ -267,7 +270,10 @@ def pull_grib_files(
         if cleanup_folder:
             logger.debug(f"Removing temporary grib folder {tmp_grib_folder}")
             shutil.rmtree(tmp_grib_folder)
-        logger.info("Successfully pulled all grib files")
+        if len(grib_files_and_dates) == 0:
+            logger.info("No grib files were required")
+        else:
+            logger.info("Successfully pulled all grib files")
 
     return grib_files_and_dates
 

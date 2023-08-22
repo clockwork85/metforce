@@ -82,4 +82,4 @@ if __name__ == "__main__":
                            required.start_range, required.end_range, optional.freq)
     logger.trace(f"{header=}")
     write_met_data(met_df, optional.outfile, header, parameters)
-    logger.success("Finished processing")
+    logger.success(f"Finished processing met data to output: {optional.outfile}")

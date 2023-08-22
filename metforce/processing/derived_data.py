@@ -35,7 +35,7 @@ def build_global_df(
     if len(global_dict) != len(global_parameters):
         missing_parameters = set(global_parameters) - set(global_dict.keys())
         raise KeyError(f"The following parameters are not supported by any pvlib functions: {missing_parameters}")
-
+    logger.info(f"Global dataframe built with parameters: {', '.join(list(global_dict.keys())).rstrip(', ')}")
     return pd.DataFrame(global_dict, index=date_range)
 
 # Helper function to modify global parameters
