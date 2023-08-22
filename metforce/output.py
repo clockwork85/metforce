@@ -22,19 +22,43 @@ def create_header(location_name: str, latitude: float, longitude: float, elevati
 
 
 def write_met_data(met_df: pd.DataFrame, outfile: str, header: str, parameters: Parameters) -> None:
+    """
+    Writes the met data to the output file.
+
+    Parameters
+    ----------
+    met_df : pd.DataFrame
+        The DataFrame containing the met data.
+    outfile : str
+        The output file path.
+    header : str
+        The header string to be written in the output file.
+    parameters : Parameters
+        Various parameters.
+
+    Returns
+    -------
+    None
+    """
 
     logger.info(f"Writing met data to {outfile}")
     max_lengths = {}
+    # Finding the maximum lengths for each column
+    for col in met_df.columns:
+        decimals = default_met_decimal.get(col, 0) # default to zero decimal places
+        max_length = max(len(f'{item:.{decimals}f}') if isinstance(item, float) else len(str(item)) for item in met_df[col])
+        # Compare with default width and take the larger value
+        max_lengths[col] = max(max_length, default_met_width[col])
+
     units = [default_met_units.get(col) for col in met_df.columns]
-    # met_df.rename(columns=default_col_names, inplace=True)
     with open(outfile, 'w') as f:
         f.write(header)
         for col in met_df.columns:
-            f.write(f'{default_col_names[col]:<{default_met_width[col]}}')
+            f.write(f'{default_col_names[col]:<{max_lengths[col]}}')
         f.write('\n')
 
         for col, unit in zip(met_df.columns, units):
-            f.write(f'{unit:<{default_met_width[col]}}')
+            f.write(f'{unit:<{max_lengths[col]}}')
         f.write('\n')
 
         # Write the sources
@@ -45,17 +69,17 @@ def write_met_data(met_df: pd.DataFrame, outfile: str, header: str, parameters: 
                 continue
             else:
                 source = parameters.get(col, {}).get('source', '-')
-                f.write(f"{source:<{default_met_width[col]}}")
+                f.write(f"{source:<{max_lengths[col]}}")
         f.write('\n')
 
         for index, row in met_df.iterrows():
             for col, item in zip(met_df.columns, row):
-                decimals = default_met_decimal.get(col, 0) # default to zero decimal places
+                decimals = default_met_decimal.get(col, 0)
                 logger.trace(f"Writing {item} to {col} with {decimals} decimal places")
                 try:
                     formatted_item = f'{item:.{decimals}f}'
                 except ValueError:
                     formatted_item = f'{item}'
-                f.write(f'{formatted_item:<{default_met_width[col]}}')
+                f.write(f'{formatted_item:<{max_lengths[col]}}')
             f.write('\n')
 

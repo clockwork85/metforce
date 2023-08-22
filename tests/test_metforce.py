@@ -4,10 +4,16 @@ import numpy as np
 from unittest.mock import MagicMock
 
 
-from metforce import (
+from metforce.processing.util import (
     check_for_missing_dates,
+)
+
+from metforce.processing.metstation import (
     fill_in_missing_metdata,
-    get_solar_positions,
+)
+
+from metforce.processing.pv import (
+    get_solar_positions
 )
 
 from metforce.processing.grib import (
@@ -184,8 +190,8 @@ def test_get_relative_humidity_grib(mocker):
     longitude = 0.0  # Replace with actual longitude
 
     # Mocking the functions get_temperature_grib and get_pressure_grib
-    mocker.patch('metforce_grib.get_temperature_grib', return_value=20.0)  # Temperature in Celsius
-    mocker.patch('metforce_grib.get_pressure_grib', return_value=1013.25 / 1000.0)  # Pressure in hPa
+    mocker.patch('metforce.processing.grib.get_temperature_grib', return_value=20.0)  # Temperature in Celsius
+    mocker.patch('metforce.processing.grib.get_pressure_grib', return_value=1013.25 / 1000.0)  # Pressure in hPa
 
     # Mocking the function eccodes.codes_grib_find_nearest to return a predefined specific humidity
     nearest_mock = MagicMock()
