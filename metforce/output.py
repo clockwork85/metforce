@@ -46,7 +46,7 @@ def write_met_data(met_df: pd.DataFrame, outfile: str, header: str, parameters: 
     # Finding the maximum lengths for each column
     for col in met_df.columns:
         decimals = default_met_decimal.get(col, 0) # default to zero decimal places
-        max_length = max(len(f'{item:.{decimals}f}') if isinstance(item, float) else len(str(item)) for item in met_df[col])
+        max_length = max(len(f'{item:.{decimals}f}') if isinstance(item, float) else len(str(item)) for item in met_df[col]) + 1
         # Compare with default width and take the larger value
         max_lengths[col] = max(max_length, default_met_width[col])
 
