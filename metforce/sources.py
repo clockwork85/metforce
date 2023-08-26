@@ -7,6 +7,7 @@ from metforce.processing.grib import process_grib_data
 from metforce.processing.metstation import process_metstation_data
 from metforce.processing.pv import process_pvlib_data
 from metforce.processing.derived_data import process_global_data
+from metforce.processing.derived_data import process_brunt_data
 
 
 class DataSourceStrategy(ABC):
@@ -38,12 +39,17 @@ class GlobalDataSourceStrategy(DataSourceStrategy):
     def __init__(self):
         super().__init__(process_global_data)
 
+class BruntDataSourceStrategy(DataSourceStrategy):
+    def __init__(self):
+        super().__init__(process_brunt_data)
+
 
 class Source(Enum):
     GRIB = "grib"
     MET = "met"
     PVLIB = "pvlib"
     GLOBAL = "global"
+    BRUNT = "brunt"
 
 
 source_strategies = {
@@ -51,4 +57,5 @@ source_strategies = {
     Source.MET.value: MetDataSourceStrategy(),
     Source.PVLIB.value: PvlibDataSourceStrategy(),
     Source.GLOBAL.value: GlobalDataSourceStrategy(),
+    Source.BRUNT.value: BruntDataSourceStrategy()
 }

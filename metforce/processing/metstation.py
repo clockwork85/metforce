@@ -21,9 +21,13 @@ def process_metstation_data(parameters: Parameters, metdata: Optional[pd.DataFra
     if metdata is not None:
         if interp_method is not None:
             metdata = fill_in_missing_metdata(metdata, met_key, date_range, metstation_freq, interp_method)
-            logger.trace(f"{metdata[:50]=}")
+            logger.trace(f"{metdata[:10]=}")
+            logger.trace(f"{metdata[-10:]=}")
         metstation_df = build_metstation_df(met_key, metdata, date_range)
-        logger.trace(f"{metstation_df[:50]=}")
+        # Getting rid of negative global shortwave values from the instrument
+        metstation_df.loc[metstation_df['global_shortwave'] < 0, 'global_shortwave'] = 0.0
+        logger.trace(f"{metstation_df[:10]=}")
+        logger.trace(f"{metstation_df[-10:]=}")
     elif met_key:
         raise ValueError("No met station data provided to pull met parameters from")
     else:
@@ -45,7 +49,8 @@ def build_metstation_df(met_key: Dict[str, str], metdata: pd.DataFrame, date_ran
                         "Time mismatch error: The time index in the dataframe does not match the time index you are trying to assign.")
                     logger.error(f"Met Data Start: {metdata.index.min()}, End: {metdata.index.max()}")
                     logger.error(f"Your Start: {met_station_df.index.min()}, End: {met_station_df.index.max()}")
-                    logger.error(f"{metdata[:50]=}")
+                    logger.error(f"{metdata[:10]=}")
+                    logger.error(f"{metdata[-10:]=}")
                 else:
                     logger.error(f"Key error: The key '{key}' does not exist in the dataframe.")
                 raise e
@@ -77,7 +82,8 @@ def read_metstation_data(metfile: str) -> Union[pd.DataFrame, None]:
             utc = pytz.UTC
             metdata = pd.read_excel(metfile, skiprows=[1], index_col=0)
             metdata.tz_localize(utc)
-            logger.trace(f"{metdata[:50]=}")
+            logger.trace(f"{metdata[:10]=}")
+            logger.trace(f"{metdata[-10:]=}")
         except ValueError:
             logger.error(f"Could not read metstation data from {metfile}")
             raise

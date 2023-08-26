@@ -91,8 +91,8 @@ default_met_decimal = {
     "diffuse_shortwave": 2,
     "direct_shortwave": 2,
     "downwelling_lwir": 2,
-    "zenith": 1,
-    "azimuth": 1,
+    "zenith": 2,
+    "azimuth": 2,
 }
 
 default_met_width = {
@@ -118,8 +118,8 @@ default_met_width = {
     "diffuse_shortwave": 9,
     "direct_shortwave": 7,
     "downwelling_lwir": 8,
-    "zenith": 7,
-    "azimuth": 7,
+    "zenith": 8,
+    "azimuth": 8,
 }
 
 default_met_units = OrderedDict()

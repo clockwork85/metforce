@@ -69,6 +69,9 @@ def get_grib_dates(metdata: pd.DataFrame, parameters: Dict[str, Dict], date_rang
     return []
 
 def get_pressure_grib(gid_list: List, latitude: float, longitude: float) -> float:
+    # logger.trace(f"{gid_list=}")
+    # logger.trace(f"{GID.SURFACE_PRESSURE=}")
+    # logger.trace(f"{GID.SURFACE_PRESSURE.value=}")
     gid = gid_list[GID.SURFACE_PRESSURE.value]
     nearest = eccodes.codes_grib_find_nearest(gid, latitude, longitude)[0]
     pressure_in_Pa = nearest.value
@@ -170,18 +173,20 @@ grib_function_mapper = {
 
 def retrieve_gid_list(gribfile: str) -> List:
     # with statement guarantees that an fid.close() is performed
+    logger.trace(f"Opening file: {gribfile}")
     with open(gribfile, "rb") as fid:
 
         # Get number of data layers from GRIB file (known as messages)
         try:
             message_count = eccodes.codes_count_in_file(fid)
         except Exception as e:
-            # This is when there is an incomplete file in your list - So it
-            # will attempt to delete and redownload it
             logger.error(f"Error in {gribfile} - {e}")
             raise e
         # Get a pointer list to each data layer
         gid_list = [eccodes.codes_grib_new_from_file(fid) for i in range(message_count)]
+        if len(gid_list) == 0: 
+            # gid list is empty when there was an issue downloading the file.
+            logger.warning(f"gid_list for {gribfile} is empty. Possible solution is to delete and redownload file.")
 
     return gid_list
 
@@ -195,29 +200,51 @@ def build_grib_df(
     """
     Builds a dataframe of grib data for a given list of parameters and dates
     """
+    logger.debug("Building grib dataframe")
+    logger.trace(f"{len(grib_dates_and_files)=}")
     try:
         grib_dates = sorted(grib_dates_and_files.keys())
-        parameter_series_dict = {
-            parameter: pd.Series(
-                [
-                    grib_function_mapper[parameter](
-                        retrieve_gid_list(grib_dates_and_files[date]),
-                        latitude,
-                        longitude,
-                    )
-                    for date in grib_dates
-                ],
-                index=grib_dates,
-            )
-            for parameter in parameters
-            if parameter in grib_function_mapper
+        # logger.trace(f"{len(grib_dates)=}")
+        # logger.trace(f"{grib_dates[:5]=}")
+        # logger.trace(f"{grib_dates[-5:]=}")
+        # parameter_series_dict = {
+        #     parameter: pd.Series(
+        #         [
+        #             grib_function_mapper[parameter](
+        #                 retrieve_gid_list(grib_dates_and_files[date]),
+        #                 latitude,
+        #                 longitude,
+        #             )
+        #             for date in grib_dates
+        #         ],
+        #         index=grib_dates,
+        #     )
+        #     for parameter in parameters
+        #     if parameter in grib_function_mapper
+        # }
+        parameter_data_dict = {parameter: [] for parameter in parameters}
+
+        for date in grib_dates:
+            gid_list = retrieve_gid_list(grib_dates_and_files[date])
+            for parameter in parameters: 
+                if parameter in grib_function_mapper:
+                    parameter_data_dict[parameter].append(grib_function_mapper[parameter](gid_list, latitude, longitude))
+                else: 
+                    raise NotImplementedError(f"Parameter {parameter} not in grib function mapper {grib_function_mapper}")
+        logger.trace(f"{parameter_data_dict=}")
+        parameter_series_dict = { 
+            parameter: pd.Series(data, index=grib_dates) for parameter, data in parameter_data_dict.items()
         }
+        logger.trace(f"{parameter_series_dict=}")
+        
         if len(parameter_series_dict) != len(parameters):
             missing_parameters = set(parameters) - set(parameter_series_dict.keys())
             raise KeyError(
                 f"The following parameters are not available in GRIB LDAS data: {missing_parameters}"
             )
         grib_df = pd.DataFrame(parameter_series_dict)
+        logger.debug(f"Grib dataframe built.")
+        logger.trace(f"{grib_df[:10]}")
         return grib_df
     except Exception as e:
         logger.error(f"Error building grib dataframe: {e}")
@@ -241,6 +268,7 @@ def write_grib_file_to_path(date, header, gribfile, tmp_grib_folder):
     # filename = self.ftp.retrbinary('RETR ' + gribfile, lp.write)
 
     url = header + "/" + yr + "/" + day + "/" + gribfile
+
     request = urllib.request.Request(url)
     response = urllib.request.urlopen(request)
 
@@ -264,7 +292,7 @@ def pull_grib_files(
                 date, latitude, longitude, tmp_grib_folder, cleanup_folder
             )
     except Exception as e:
-        logger.error(f"Error pulling grib files: {e}")
+        logger.error(f"Error {e} pulling grib file: {date}")
         raise e
     finally:
         if cleanup_folder:
@@ -318,7 +346,6 @@ def pull_grib_file(
     password_manager.add_password(None, "https://urs.earthdata.nasa.gov", user, passwd)
 
     cookie_jar = CookieJar()
-
     opener = urllib.request.build_opener(
         urllib.request.HTTPBasicAuthHandler(password_manager),
         urllib.request.HTTPCookieProcessor(cookie_jar),
@@ -328,7 +355,11 @@ def pull_grib_file(
     # Setting up directory and searching for local copy
     local_copy = find_local_grib_file(gribfile, tmp_grib_folder)
     if not local_copy:
-        write_grib_file_to_path(date, header, gribfile, tmp_grib_folder)
+        try:
+            write_grib_file_to_path(date, header, gribfile, tmp_grib_folder)
+        except Exception as e: 
+            logger.error(f"Error {e} in write_grib_file_to_path.")
+            raise e
     else:
         logger.debug(f"Found local copy of {gribfile} at for {date}")
 

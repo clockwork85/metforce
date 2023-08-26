@@ -45,7 +45,8 @@ def process_met_data(latitude: float,
         Source.MET.value: {'metdata': metdata, 'date_range': date_range, 'metstation_freq': metstation_freq,
                            'interp_method': interp_method},
         Source.PVLIB.value: {'date_range': date_range, 'latitude': latitude, 'longitude': longitude},
-        Source.GLOBAL.value: {'date_range': date_range, 'dataframes': dataframes}
+        Source.GLOBAL.value: {'date_range': date_range, 'dataframes': dataframes},
+        Source.BRUNT.value: {'date_range': date_range, 'dataframes': dataframes}
     }
 
     for source, strategy in source_strategies.items():
