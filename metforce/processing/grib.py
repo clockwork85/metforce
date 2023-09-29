@@ -31,11 +31,13 @@ class GID(Enum):
 def process_grib_data(parameters: Parameters, metdata: pd.DataFrame, date_range: pd.DatetimeIndex,
                       latitude: float, longitude: float, tmp_grib_folder: str, pull_grib: bool, cleanup_folder: bool,
                       interp_method: Optional[str] = None) -> Optional[pd.DataFrame]:
-    if not pull_grib:
+
+    grib_parameters = [key for key in parameters.keys() if parameters[key]['source'] == 'grib']
+    if not pull_grib and not grib_parameters:
         return None
     grib_dates = get_grib_dates(metdata, parameters, date_range, interp_method, pull_grib)
     grib_files_and_dates_dict = pull_grib_files(grib_dates, latitude, longitude, tmp_grib_folder, cleanup_folder)
-    grib_parameters = [key for key in parameters.keys() if parameters[key]['source'] == 'grib']
+    # grib_parameters = [key for key in parameters.keys() if parameters[key]['source'] == 'grib']
 
     logger.trace(f"{grib_parameters=}")
 
