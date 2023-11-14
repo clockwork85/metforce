@@ -6,6 +6,8 @@ import toml
 
 from metforce.data_types import Parameters
 from metforce.defaults import (
+    default_global_fraction,
+    default_global_coszenith,
     default_met,
     default_met_keys,
     default_met_sources,
@@ -134,14 +136,25 @@ class MetforceConfig(BaseModel):
 
         # Checking for source and key for each parameter - filling in defaults if not provided
         for param, settings in parameters.items():
-            if settings.get("source") is None:
+            source = settings.get("source")
+            if source is None:
                 logger.debug("No source specified, using default met source")
                 settings["source"] = default_met_sources[param]
-            if settings.get("source") == "met" and not settings.get("key"):
-                logger.debug(f"No key specified for {param}, using default met key")
+            if source == "met" and not settings.get("key"):
                 settings["key"] = default_met_keys[param]
+                logger.debug(f"No key specified for {param}, using default met key {settings['key']}")
+            if source == "global_fraction" and not settings.get("fraction"):
+                logger.warning(f"No fraction specified for {param}, using default percentage")
+                settings["fraction"] = default_global_fraction[param]["fraction"]
+            if source == "global_coszenith" and param == 'direct_shortwave' and not settings.get("fraction"):
+                logger.trace(f"{settings=}")
+                logger.warning(f"No fraction specified for {param}, using default percentage with {default_global_coszenith[param]['fraction']}")
+                settings["fraction"] = default_global_coszenith[param]["fraction"]
+            logger.trace(f"Param: {param} - Settings: {settings}")
+            parameters[param] = settings
 
         values["parameters"] = {"parameters": parameters}
+        logger.trace(f"Parameters: {values['parameters']}")
 
         return values
 

@@ -56,6 +56,15 @@ default_met_keys = {
     "azimuth": "AzDeg",
 }
 
+default_global_fraction = {
+        "direct_shortwave": {"fraction": 0.8},
+        "diffuse_shortwave": {"fraction": 0.2},
+}
+
+default_global_coszenith = {
+        "direct_shortwave": {"fraction": 0.95},
+}
+
 default_met_sources = {
     "pressure": "met",
     "temperature": "met",
@@ -64,8 +73,8 @@ default_met_sources = {
     "wind_direction": "met",
     "precipitation": "met",
     "global_shortwave": "met",
-    "diffuse_shortwave": "global_20%",
-    "direct_shortwave": "global_80%",
+    "diffuse_shortwave": "global_coszenith",
+    "direct_shortwave": "global_coszenith",
     "downwelling_lwir": "met",
     "zenith": "pvlib",
     "azimuth": "pvlib",

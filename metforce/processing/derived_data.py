@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -6,19 +6,55 @@ import pandas as pd
 from metforce.data_types import Parameters
 from metforce.logger_config import logger
 
+def process_global_fraction(global_shortwave: pd.Series, fraction: float) -> pd.Series:
+    return global_shortwave * fraction
+
+
+def process_coszenith(global_shortwave: pd.Series, zenith: float, fraction: float) -> Dict[str, pd.Series]:
+    direct_shortwave = global_shortwave * fraction * np.cos(np.radians(zenith))
+    diffuse_shortwave = global_shortwave - direct_shortwave
+    return {'direct_shortwave': direct_shortwave, 'diffuse_shortwave': diffuse_shortwave}
+
 # Function for Global data processing
 def process_global_data(parameters: Parameters, date_range: pd.DatetimeIndex,
                         dataframes: Dict[str, pd.DataFrame]) -> Optional[pd.DataFrame]:
     global_parameters = [key for key in parameters.keys() if parameters[key]['source'].startswith('global')]
-    logger.trace(f"{global_parameters=}")
 
-    if global_parameters:
-        global_parameters = modify_global_parameters(global_parameters, parameters)
-        global_source = parameters['global_shortwave']['source']
-        global_shortwave = dataframes[global_source]['global_shortwave']
-        global_df = build_global_df(global_parameters, date_range, global_shortwave)
-    else:
-        global_df = None
+    if not global_parameters:
+        return None
+
+    logger.debug(f"{global_parameters=}")
+    global_df_dict = {}
+    global_shortwave = dataframes[parameters['global_shortwave']['source']]['global_shortwave']
+
+    logger.trace(f"{parameters=}")
+
+    for parameter in global_parameters:
+        source = parameters[parameter]['source']
+        logger.debug(f"Processing {parameter} from {source}")
+
+        if '%' in source:
+            fraction = float(source.split('_')[1][:-1]) / 100.0
+            global_df_dict[parameter] = process_global_fraction(global_shortwave, fraction)
+        elif 'fraction' in source:
+            fraction = parameters[parameter]['fraction']
+            global_df_dict[parameter] = process_global_fraction(global_shortwave, fraction)
+        elif 'coszenith' in source:
+            if parameter == 'direct_shortwave':
+                zenith = dataframes[parameters['zenith']['source']]['zenith']
+                fraction = parameters[parameter]['fraction']
+                global_df_dict.update(process_coszenith(global_shortwave, zenith, fraction))
+            elif parameter == 'diffuse_shortwave':
+                pass # Taken care of by direct_shortwave
+            else:
+                raise ValueError(f"Unknown parameter {parameter} for source {source}")
+        else:
+            raise ValueError(f"Unknown source for {parameter}: {source}")
+        parameters[parameter]['source'] = 'global'
+
+    global_df = pd.DataFrame(global_df_dict, index=date_range)
+    logger.trace(f"{global_df[:10]=}")
+    logger.trace(f"{global_df[-10:]=}")
     return global_df
 
 def build_global_df(
@@ -38,6 +74,17 @@ def build_global_df(
         raise KeyError(f"The following parameters are not supported by any pvlib functions: {missing_parameters}")
     logger.info(f"Global dataframe built with parameters: {', '.join(list(global_dict.keys())).rstrip(', ')}")
     return pd.DataFrame(global_dict, index=date_range)
+
+# Helper function to modify global parameters
+def modify_global_parameters(global_parameters: List[str], parameters: Parameters) -> Dict[str, float]:
+    global_parameters_dict = {}
+    for key in global_parameters:
+        if parameters[key]['source'].startswith('global'):
+            fraction = float(parameters[key]['source'].split('_')[1][:-1]) / 100.0
+            parameters[key]['source'] = 'global'
+            global_parameters_dict[key] = fraction
+    logger.trace(f"{global_parameters_dict=}")
+    return global_parameters_dict
 
 def build_brunt_df(
         brunt_parameters: List[str],
@@ -59,16 +106,7 @@ def build_brunt_df(
     logger.info(f"Global dataframe built with parameters: {', '.join(list(brunt_dict.keys())).rstrip(', ')}")
     return pd.DataFrame(brunt_dict, index=date_range)
 
-# Helper function to modify global parameters
-def modify_global_parameters(global_parameters: List[str], parameters: Parameters) -> Dict[str, float]:
-    global_parameters_dict = {}
-    for key in global_parameters:
-        if parameters[key]['source'].startswith('global'):
-            fraction = float(parameters[key]['source'].split('_')[1][:-1]) / 100.0
-            parameters[key]['source'] = 'global'
-            global_parameters_dict[key] = fraction
-    logger.trace(f"{global_parameters_dict=}")
-    return global_parameters_dict
+
 
 def process_brunt_data(parameters: Parameters, date_range: pd.DatetimeIndex,
                         dataframes: Dict[str, pd.DataFrame]) -> Optional[pd.DataFrame]:
@@ -85,20 +123,6 @@ def process_brunt_data(parameters: Parameters, date_range: pd.DatetimeIndex,
     else:
         brunt_df = None
     return brunt_df
-
-# def modify_brunt_parameters(brunt_parameters: List[str], parameters: Parameters) -> Dict[str, float]:
-#     brunt_parameters_dict = {}
-#     for key in brunt_parameters:
-#         if parameters[key]['source'].startswith('brunt'):
-#             temperature = parameters['temperature']['source']
-#             logger.trace(f"{temperature=}")
-#             relative_humidity = parameters['relative_humidity']['source']
-#             logger.trace(f"{relative_humidity=}")
-#             lw_downwelling = calculate_dlr_brunt(temperature, relative_humidity)
-#             parameters[key]['source'] = 'brunt'
-#             brunt_parameters_dict[key] = lw_downwelling
-#     logger.trace(f"{brunt_parameters_dict=}")
-#     return brunt_parameters_dict
 
 
 def calculate_dlr_brunt(temp_celsius: pd.Series, relative_humidity: pd.Series) -> pd.Series:
