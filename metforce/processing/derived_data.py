@@ -26,6 +26,10 @@ def process_global_data(parameters: Parameters, date_range: pd.DatetimeIndex,
     logger.debug(f"{global_parameters=}")
     global_df_dict = {}
     global_shortwave = dataframes[parameters['global_shortwave']['source']]['global_shortwave']
+    if global_shortwave < 0.0:
+        global_shortwave = 0.0
+    if global_shortwave is None:
+        raise ValueError("No global shortwave data provided to derive direct and diffuse shortwave parameters")
 
     logger.trace(f"{parameters=}")
 

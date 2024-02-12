@@ -1,10 +1,15 @@
 from enum import Enum
 import datetime
+from http.client import RemoteDisconnected
 from http.cookiejar import CookieJar
 from pathlib import Path
 import shutil
+from socket import timeout as TimeoutError
+import time
 from typing import Dict, List, Optional, Union
 import urllib
+from urllib.error import HTTPError, URLError
+
 
 import eccodes
 import numpy as np
@@ -145,6 +150,8 @@ def get_shortwave_radiation(gid_list: List, latitude: float, longitude: float) -
     gid = gid_list[GID.SW_RADIATION_FLUX_DOWNWARDS.value]
     nearest = eccodes.codes_grib_find_nearest(gid, latitude, longitude)[0]
     shortwave_radiation = nearest.value
+    if shortwave_radiation < 0:
+        shortwave_radiation = 0.0
     return shortwave_radiation
 
 def get_longwave_radiation(gid_list: List, latitude: float, longitude: float) -> float:
@@ -253,7 +260,7 @@ def build_grib_df(
         raise e
 
 
-def write_grib_file_to_path(date, header, gribfile, tmp_grib_folder):
+def write_grib_file_to_path(date, header, gribfile, tmp_grib_folder, number_of_retries=3, retry_delay=3):
     """
     Grabs a grib file from the NASA website
     """
@@ -271,13 +278,24 @@ def write_grib_file_to_path(date, header, gribfile, tmp_grib_folder):
 
     url = header + "/" + yr + "/" + day + "/" + gribfile
 
-    request = urllib.request.Request(url)
-    response = urllib.request.urlopen(request)
+    for attempt in range(number_of_retries + 1):
+        try:
+            with open(gribfilepath, "wb") as lp:
+                logger.debug(f"Retrieving grib file {gribfile} from NASA NLDAS for {date}")
+                request = urllib.request.Request(url)
+                with urllib.request.urlopen(request) as response:
+                    lp.write(response.read())
+            break
+        except (HTTPError, URLError, RemoteDisconnected, TimeoutError) as e:
+            logger.error(f"Error {e} in write_grib_file_to_path - attempt {attempt} of {number_of_retries}")
 
-    lp.write(response.read())
-    # self.ftp.cwd('../../') # Back to the main directory
-    lp.close()
+            if gribfilepath.exists():
+                gribfilepath.unlink()
 
+            if attempt == number_of_retries:
+                logger.error(f"Error {e} in write_grib_file_to_path - attempt {attempt} of {number_of_retries}")
+                raise e
+        time.sleep(retry_delay)
 
 def pull_grib_files(
     grib_dates: List[datetime.datetime],

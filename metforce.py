@@ -17,20 +17,17 @@ from metforce.sources import source_strategies, Source
 
 def process_met_data(latitude: float,
                 longitude: float,
-                elevation: float,
                 start_range: str,
                 end_range: str,
                 metfile: Optional[str],
-                outfile: Optional[str],
                 tmp_grib_folder: Optional[str],
                 cleanup_folder: Optional[bool],
-                location_name: Optional[str],
                 freq: Optional[str],
                 pull_grib: Optional[bool],
                 interp_method: Optional[str],
                 metstation_freq: Optional[str],
                 parameters: Parameters,
-                ) -> Tuple[pd.DataFrame, Dict[str, Dict[str, str]]]:
+                ) -> pd.DataFrame:
 
     date_range = pd.date_range(start_range, end_range, freq=freq)
     metdata = read_metstation_data(metfile)
@@ -53,8 +50,7 @@ def process_met_data(latitude: float,
         logger.debug(f"Processing {source}")
         dataframes[source] = strategy.process_data(parameters, **source_args[source])
 
-    met_df = merge_and_prepare_for_output(parameters, dataframes, location_name, latitude, longitude, elevation,
-                                          start_range, end_range, freq, outfile)
+    met_df = merge_and_prepare_for_output(parameters, dataframes)
 
     return met_df
 
@@ -72,12 +68,18 @@ if __name__ == "__main__":
     required = config.required
     optional = config.optional
     parameters = config.parameters.parameters
-    met_df = process_met_data(required.latitude, required.longitude, required.elevation,
+    met_df = process_met_data(required.latitude, required.longitude,
                                           required.start_range, required.end_range,
-                                          optional.metfile, optional.outfile, optional.tmp_grib_folder,
-                                          optional.cleanup_folder, optional.location_name, optional.freq,
+                                          optional.metfile,  optional.tmp_grib_folder,
+                                          optional.cleanup_folder,  optional.freq,
                                           optional.pull_grib, optional.interp_method, optional.metstation_freq,
                                           parameters)
+    nan_columns = met_df.columns[met_df.isna().any()].tolist()
+    if nan_columns:
+        logger.error(f"NaN values found in columns: {nan_columns}")
+        logger.error(f"{met_df[nan_columns].head()}")
+        logger.error(f"{met_df[nan_columns].tail()}")
+        raise ValueError(f"NaN values found in columns: {nan_columns}")
     # Create the header for the output file
     header = create_header(optional.location_name, required.latitude, required.longitude, required.elevation,
                            required.start_range, required.end_range, optional.freq)

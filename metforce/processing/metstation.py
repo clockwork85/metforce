@@ -24,8 +24,11 @@ def process_metstation_data(parameters: Parameters, metdata: Optional[pd.DataFra
             logger.trace(f"{metdata[:10]=}")
             logger.trace(f"{metdata[-10:]=}")
         metstation_df = build_metstation_df(met_key, metdata, date_range)
-        # Getting rid of negative global shortwave values from the instrument
+        # Getting rid of negative global irradiance values from the instrument
         metstation_df.loc[metstation_df['global_shortwave'] < 0, 'global_shortwave'] = 0.0
+        metstation_df.loc[metstation_df['direct_shortwave'] < 0, 'direct_shortwave'] = 0.0
+        metstation_df.loc[metstation_df['diffuse_shortwave'] < 0, 'diffuse_shortwave'] = 0.0
+
         logger.trace(f"{metstation_df[:10]=}")
         logger.trace(f"{metstation_df[-10:]=}")
     elif met_key:

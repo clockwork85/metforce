@@ -8,19 +8,15 @@ from metforce.logger_config import logger
 from metforce.processing.util import add_date_columns, add_unused_columns, julian_to_datetime
 from metforce.processing.grib import build_grib_df, pull_grib_files
 
+
 # Function to merge dataframes and prepare for output
-def merge_and_prepare_for_output(parameters: Dict[str, Dict[str, str]], dataframes: Dict[str, pd.DataFrame],
-                                 location_name: str, latitude: float, longitude: float,
-                                 elevation: float, start_range: str, end_range: str, freq: str, outfile: str):
+def merge_and_prepare_for_output(parameters: Dict[str, Dict[str, str]],
+                                 dataframes: Dict[str, pd.DataFrame]) -> pd.DataFrame:
     # Remove the dataframe keys whose values are None
     dataframes = {key: value for key, value in dataframes.items() if value is not None}
 
     # Build the new dataframe with the DateTimes as the index to add columns to
     met_df = merge_met_dataframes(parameters, dataframes)
-
-    # Create the header for the output file
-    # header = create_header(location_name, latitude, longitude, elevation, start_range, end_range, freq)
-    # logger.trace(f"{header=}")
 
     # Add unused columns to the dataframe like Visibility, Aerosol, Cloud Cover, etc.
     met_df = add_unused_columns(met_df)
@@ -47,8 +43,9 @@ def merge_met_dataframes(parameters: Parameters, dataframes: Dict[str, pd.DataFr
         source = parameters[parameter]['source']
         try:
             df = dataframes[source]
-        except KeyError as e: 
-            logger.error(f"Source {source} method does not exist. Edit your config file to change the source or add the method to deal with this new source.")
+        except KeyError as e:
+            logger.error(
+                f"Source {source} method does not exist. Edit your config file to change the source or add the method to deal with this new source.")
             raise e
         try:
             logger.trace(f"Trying to merge {parameter} from {source}")
@@ -57,4 +54,3 @@ def merge_met_dataframes(parameters: Parameters, dataframes: Dict[str, pd.DataFr
             logger.error(f"Parameter {parameter} not found in dataframe {source}")
             raise e
     return merged_df
-

@@ -1,1 +1,12 @@
 *.met
+*.dat 
+*.toml
+config/
+*.txt
+*.xlsx
+data/
+*.idea
+*.pyc
+*__pycache__
+*.spv
+metforce.egg-info/
