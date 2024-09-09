@@ -16,8 +16,8 @@ def create_header(location_name: str, latitude: float, longitude: float, elevati
     year = start_date.year
 
     header = f"{location_name} Met Data from {start_range} to {end_range} at {freq} resolution\n"
-    header += f"Elevation(m), Latitude, Longitude, GMT-UTC, Year\n"
-    header += f"{elevation}, {latitude}, {longitude}, 0, {year}\n"
+    header += f"Elevation(m) Latitude Longitude GMT-UTC Year\n"
+    header += f"{elevation} {latitude} {longitude} 0 {year}\n"
     return header
 
 
