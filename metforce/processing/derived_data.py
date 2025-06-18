@@ -24,41 +24,52 @@ def process_global_data(parameters: Parameters, date_range: pd.DatetimeIndex,
         return None
 
     logger.debug(f"{global_parameters=}")
-    global_df_dict = {}
+
+
     global_shortwave = dataframes[parameters['global_shortwave']['source']]['global_shortwave']
-    if global_shortwave < 0.0:
-        global_shortwave = 0.0
-    if global_shortwave is None:
-        raise ValueError("No global shortwave data provided to derive direct and diffuse shortwave parameters")
+    logger.debug(f"Global shortwave: {global_shortwave} {type(global_shortwave)=}")
+
+    global_shortwave = global_shortwave.clip(lower=0.0) # Remove negative values 
+    # if global_shortwave < 0.0:
+    #     global_shortwave = 0.0
+    # if global_shortwave is None:
+    #     raise ValueError("No global shortwave data provided to derive direct and diffuse shortwave parameters")
 
     logger.trace(f"{parameters=}")
 
+    derived = {}
     for parameter in global_parameters:
         source = parameters[parameter]['source']
         logger.debug(f"Processing {parameter} from {source}")
 
-        if '%' in source:
+        if source.startswith("global_") and source.endswith("%"):
+            # e.g. "global_70%"
             fraction = float(source.split('_')[1][:-1]) / 100.0
-            global_df_dict[parameter] = process_global_fraction(global_shortwave, fraction)
-        elif 'fraction' in source:
+            derived[parameter] = process_global_fraction(global_shortwave, fraction)
+
+        elif source == "global_fraction":
             fraction = parameters[parameter]['fraction']
-            global_df_dict[parameter] = process_global_fraction(global_shortwave, fraction)
-        elif 'coszenith' in source:
+            derived[parameter] = process_global_fraction(global_shortwave, fraction)
+
+        elif source == "global_coszenith":
             if parameter == 'direct_shortwave':
                 zenith = dataframes[parameters['zenith']['source']]['zenith']
                 fraction = parameters[parameter]['fraction']
-                global_df_dict.update(process_coszenith(global_shortwave, zenith, fraction))
+                derived.update(process_coszenith(global_shortwave, zenith, fraction))
+
             elif parameter == 'diffuse_shortwave':
                 pass # Taken care of by direct_shortwave
             else:
                 raise ValueError(f"Unknown parameter {parameter} for source {source}")
         else:
             raise ValueError(f"Unknown source for {parameter}: {source}")
+
         parameters[parameter]['source'] = 'global'
 
-    global_df = pd.DataFrame(global_df_dict, index=date_range)
-    logger.trace(f"{global_df[:10]=}")
-    logger.trace(f"{global_df[-10:]=}")
+    global_df = pd.DataFrame(derived, index=date_range)
+    # logger.trace(f"{derived=}")
+    # logger.trace(f"{derived[:10]=}")
+    # logger.trace(f"{derived[-10:]=}")
     return global_df
 
 def build_global_df(

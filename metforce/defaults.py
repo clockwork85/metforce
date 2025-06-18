@@ -6,8 +6,8 @@ default_optional_met = {
     "header": None,
     "tmp_grib_folder": "~/tmp_grib_folder",
     "cleanup_folder": False,
-    "freq": "1H",
-    "pull_grib": False,
+    "freq": "1h",
+    "pull_nldas2": False,
     "interp_method": "time",
 }
 

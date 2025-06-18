@@ -51,7 +51,7 @@ def get_zenith_pvlib(
 ) -> float:
 
     solpos = get_solar_positions(year, julian_day, hour, minute, latitude, longitude)
-    return solpos[0][0]
+    return solpos[0].iloc[0]
 
 def get_azimuth_pvlib(
         year: int,
@@ -63,7 +63,7 @@ def get_azimuth_pvlib(
 ) -> float:
 
     solpos = get_solar_positions(year, julian_day, hour, minute, latitude, longitude)
-    return solpos[1][0]
+    return solpos[1].iloc[0]
 
 
 pvlib_parameter_map = {

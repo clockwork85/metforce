@@ -3,7 +3,8 @@ from enum import Enum
 from typing import Callable
 
 from metforce.data_types import Parameters
-from metforce.processing.grib import process_grib_data
+# from metforce.processing.grib import process_grib_data
+from metforce.processing.nldas2 import process_nldas2_data
 from metforce.processing.metstation import process_metstation_data
 from metforce.processing.pv import process_pvlib_data
 from metforce.processing.derived_data import process_global_data
@@ -18,10 +19,16 @@ class DataSourceStrategy(ABC):
         return self.processing_function(parameters, **kwargs)
 
 
-class GribDataSourceStrategy(DataSourceStrategy):
+# class GribDataSourceStrategy(DataSourceStrategy):
+#
+#     def __init__(self):
+#         super().__init__(process_grib_data)
+
+
+class NLDAS2DataSourceStrategy(DataSourceStrategy):
 
     def __init__(self):
-        super().__init__(process_grib_data)
+        super().__init__(process_nldas2_data)
 
 
 class MetDataSourceStrategy(DataSourceStrategy):
@@ -45,7 +52,8 @@ class BruntDataSourceStrategy(DataSourceStrategy):
 
 
 class Source(Enum):
-    GRIB = "grib"
+    # GRIB = "grib"
+    NLDAS2 = "nldas2"
     MET = "met"
     PVLIB = "pvlib"
     GLOBAL = "global"
@@ -53,7 +61,8 @@ class Source(Enum):
 
 
 source_strategies = {
-    Source.GRIB.value: GribDataSourceStrategy(),
+    # Source.GRIB.value: GribDataSourceStrategy(),
+    Source.NLDAS2.value: NLDAS2DataSourceStrategy(),
     Source.MET.value: MetDataSourceStrategy(),
     Source.PVLIB.value: PvlibDataSourceStrategy(),
     Source.GLOBAL.value: GlobalDataSourceStrategy(),

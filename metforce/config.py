@@ -53,11 +53,11 @@ class OptionalConfig(BaseModel):
         False, description="Whether to cleanup the temporary grib folder"
     )
     freq: Optional[str] = Field(
-        "1H", description="Frequency of the meteorological data"
+        "1h", description="Frequency of the meteorological data"
     )
-    pull_grib: Optional[bool] = Field(
+    pull_nldas2: Optional[bool] = Field(
         False,
-        description="Whether to pull the grib files from the internet if dates missing from met station",
+        description="Whether to pull the NLDAS2 files from the internet if dates missing from met station",
     )
     interp_method: Optional[str] = Field(
         "time", description="Interpolation method for missing data"

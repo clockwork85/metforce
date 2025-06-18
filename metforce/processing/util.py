@@ -33,7 +33,7 @@ def get_date_range(start_range: str, end_range: str, freq: str) -> pd.DatetimeIn
 
 def get_date_range_grib(start_range: str, end_range: str, freq: str) -> pd.DatetimeIndex:
 
-    one_hour = pd.to_timedelta("1H")
+    one_hour = pd.to_timedelta("1h")
     freq_timedelta = pd.to_timedelta(freq)
     grib_freq = one_hour if freq_timedelta < one_hour else freq_timedelta
 

@@ -44,6 +44,7 @@ def merge_met_dataframes(parameters: Parameters, dataframes: Dict[str, pd.DataFr
         try:
             df = dataframes[source]
         except KeyError as e:
+            logger.error(f"{dataframes.keys()=}")
             logger.error(
                 f"Source {source} method does not exist. Edit your config file to change the source or add the method to deal with this new source.")
             raise e
@@ -51,6 +52,7 @@ def merge_met_dataframes(parameters: Parameters, dataframes: Dict[str, pd.DataFr
             logger.trace(f"Trying to merge {parameter} from {source}")
             merged_df[parameter] = df[parameter]
         except KeyError as e:
+            logger.error(f"{df.keys()=}")
             logger.error(f"Parameter {parameter} not found in dataframe {source}")
             raise e
     return merged_df
