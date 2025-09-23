@@ -2,6 +2,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+from pvlib import irradiance as _pv_irr
 
 from metforce.data_types import Parameters
 from metforce.logger_config import logger
@@ -18,59 +19,97 @@ def process_coszenith(global_shortwave: pd.Series, zenith: float, fraction: floa
 # Function for Global data processing
 def process_global_data(parameters: Parameters, date_range: pd.DatetimeIndex,
                         dataframes: Dict[str, pd.DataFrame]) -> Optional[pd.DataFrame]:
-    global_parameters = [key for key in parameters.keys() if parameters[key]['source'].startswith('global')]
+    """
+    Create a DataFrame with any *derived* short‑wave columns requested
+    in the configuration.
 
+    Supported *source*= strings (for ``direct_shortwave`` / ``diffuse_shortwave``):
+
+    * ``global_fraction`` – constant fraction of GHI.                           
+    * ``global_coszenith`` – fraction·cos(zenith).                          
+    * ``pvlib_disc``     – pvlib.irradiance.disc                           
+    * ``pvlib_dirint``   – pvlib.irradiance.dirint                        
+    * ``pvlib_dirindex`` – pvlib.irradiance.dirindex                     
+    * ``pvlib_erbs``     – pvlib.irradiance.erbs                        
+
+    These models run on the curve of the GHI, so we need to run on the entire 
+    pd.Series to get sensical DNI
+    """
+    global_parameters = [
+            key for key in parameters 
+            if parameters[key]['source'].startswith(('global', 'pvlib_'))
+    ]
     if not global_parameters:
         return None
 
-    logger.debug(f"{global_parameters=}")
+    logger.debug(f"Derived shortwave parameters requested: {global_parameters=}")
 
+    # Grab the base GHI series
+    shortwave_src = parameters["global_shortwave"]["source"]
+    ghi = dataframes[shortwave_src]["global_shortwave"].clip(lower=0.0)
+    logger.debug(f"GHI source {shortwave_src!r} with {ghi.size} points")
 
-    global_shortwave = dataframes[parameters['global_shortwave']['source']]['global_shortwave']
-    logger.debug(f"Global shortwave: {global_shortwave} {type(global_shortwave)=}")
+    # Pre-fetch zenith if any pvlib method is present
+    needs_pvlib = any(
+            parameters[p]["source"].startswith("pvlib") for p in global_parameters
+    )
+    if needs_pvlib: 
+        zenith_src = parameters["zenith"]["source"]
+        zenith = dataframes[zenith_src]["zenith"]
+        logger.debug(f"Using zenith from {zenith_src!r}")
 
-    global_shortwave = global_shortwave.clip(lower=0.0) # Remove negative values 
-    # if global_shortwave < 0.0:
-    #     global_shortwave = 0.0
-    # if global_shortwave is None:
-    #     raise ValueError("No global shortwave data provided to derive direct and diffuse shortwave parameters")
+    derived: dict[str, pd.Series] = {}
 
-    logger.trace(f"{parameters=}")
+    # Per parameter dispatch 
+    for param in global_parameters:
+        src = parameters[param]["source"]
 
-    derived = {}
-    for parameter in global_parameters:
-        source = parameters[parameter]['source']
-        logger.debug(f"Processing {parameter} from {source}")
+        # Case 1 : Naive percentage based split
+        if src.startswith("global_") and src.endswith("%"):
+            fraction = float(src.split("_")[1][:-1]) / 100.0
+            derived[param] = ghi * fraction
 
-        if source.startswith("global_") and source.endswith("%"):
-            # e.g. "global_70%"
-            fraction = float(source.split('_')[1][:-1]) / 100.0
-            derived[parameter] = process_global_fraction(global_shortwave, fraction)
+        elif src == "global_fraction":
+            fraction = parameters[param]["fraction"]
+            derived[param] = ghi * fraction
 
-        elif source == "global_fraction":
-            fraction = parameters[parameter]['fraction']
-            derived[parameter] = process_global_fraction(global_shortwave, fraction)
+        # Case 2 - fraction * cos(zenith)
+        elif src == "global_coszenith":
+            if param == "direct_shortwave":
+                zenith = dataframes[parameters["zenith"]["source"]]["zenith"]
+                fraction = parameters[param]["fraction"]
 
-        elif source == "global_coszenith":
-            if parameter == 'direct_shortwave':
-                zenith = dataframes[parameters['zenith']['source']]['zenith']
-                fraction = parameters[parameter]['fraction']
-                derived.update(process_coszenith(global_shortwave, zenith, fraction))
+                ghi_aligned, zenith_aligned = ghi.align(zenith, join="inner")
 
-            elif parameter == 'diffuse_shortwave':
-                pass # Taken care of by direct_shortwave
-            else:
-                raise ValueError(f"Unknown parameter {parameter} for source {source}")
+                direct = ghi_aligned * fraction * np.cos(np.radians(zenith_aligned))
+                diffuse = ghi_aligned - direct
+                derived.update(
+                        {
+                            "direct_shortwave": direct.reindex(date_range),
+                            "diffuse_shortwave": diffuse.reindex(date_range),
+                            }
+                        )
+                logger.debug(f"{derived=}")
+
+        # Case 3 - pvlib-based physical models 
+        elif src.startswith("pvlib_"):
+            method = src.split("_", maxsplit=1)[1]
+            if "direct_shortwave" not in derived or "diffuse_shortwave" not in derived:
+                derived.update(_pvlib_decompose(ghi, zenith, method))
+
         else:
-            raise ValueError(f"Unknown source for {parameter}: {source}")
-
-        parameters[parameter]['source'] = 'global'
+            raise ValueError(f"Unknown source specifier {src!r} for {param}")
 
     global_df = pd.DataFrame(derived, index=date_range)
-    # logger.trace(f"{derived=}")
-    # logger.trace(f"{derived[:10]=}")
-    # logger.trace(f"{derived[-10:]=}")
+    logger.info(
+            f"Built global shortwave dataframe with columns {list(global_df.columns)}"
+    )
+
+    parameters["direct_shortwave"]["source"] = "global"
+    parameters["diffuse_shortwave"]["source"] = "global"
+
     return global_df
+
 
 def build_global_df(
         global_parameters: Dict[str, float],
@@ -163,3 +202,95 @@ def calculate_dlr_brunt(temp_celsius: pd.Series, relative_humidity: pd.Series) -
     emissivity = 0.785 - 0.00246 * temp_kelvin + 0.0000129 * temp_kelvin**2
     effective_emissivity = emissivity + 0.0224 * np.sqrt(vapor_pressure)
     return effective_emissivity * stefan_boltzmann_constant * temp_kelvin**4
+
+
+def _get_clearsky_series(
+        latitude: float,
+        longitude: float,
+        elevation: float,
+        times: pd.DatetimeIndex,
+) -> tuple[pd.Series, pd.Series]:
+    """Return (GHI_clear, DNI_clear) indexed like *times*."""
+    loc = pvlib.location.Location(latitude, longitude, altitude=elevation,
+                                  tz="UTC")
+    cs = loc.get_clearsky(
+        times,
+        model="ineichen",
+        perez_enhancement=True,
+    )
+    return cs["ghi"], cs["dni"]
+
+
+def _pvlib_decompose(
+        ghi: pd.Series,
+        zenith: pd.Series,
+        method: str,
+) -> dict[str, pd.Series]:
+    """
+    Split *global horizontal irradiance* (GHI) into direct and diffuse
+    components using one of pvlib’s physical/empirical models.
+
+    Parameters
+    ----------
+    ghi
+        Global horizontal irradiance [W m‑2].
+    zenith
+        Solar zenith angle [degrees].
+    method
+        One of ``disc``, ``dirint``, ``dirindex`` or ``erbs``.
+
+    Returns
+    -------
+    dict
+        Keys ``direct_shortwave`` and ``diffuse_shortwave`` (horizontal plane),
+        both indexed exactly like *ghi*.
+
+    Notes
+    -----
+    - All models return **DNI** (beam normal). We convert to horizontal
+      by multiplying by ``cos(zenith in radians)``.  
+    - For *erbs* the pvlib routine already delivers **DHI**; in all other
+      cases DHI is back‑calculated by energy balance (GHI − BHI).
+    """
+    logger.debug(f"Running pvlib decomposition method {method!r}") 
+    ghi, zenith = ghi.align(zenith, join='inner')
+
+    cosz = np.cos(np.radians(zenith.clip(upper=90.0)))
+    # Guard against negatives caused by zenith > 90.0 (night time)
+    cosz = cosz.where(cosz > 0, 0.0)
+
+    method = method.lower()
+
+    if method == "disc":
+        dni = _pv_irr.disc(ghi, zenith, ghi.index)["dni"]
+
+    elif method == "dirint":
+        dni = _pv_irr.dirint(ghi, zenith, ghi.index)
+
+    elif method == "dirindex": 
+        raise NotImplementedError(f"Not implemented yet, but will be soon")
+
+    elif method == "erbs":
+        df = _pv_irr.erbs(ghi, zenith, ghi.index)
+        dni = df["dni"]
+        dhi = df["dhi"].fillna(0.0)
+
+    else:
+        raise ValueError(
+                f"Unknown pvlib decomposition method {method!r}. "
+                f"Choose one of 'disc', 'dirint', 'dirindex', 'erbs'."
+        )
+
+    dni = dni.fillna(0.0)
+
+    if method != "erbs":
+        # energy balance: GHI = BHI + DHI 
+        dhi = ghi - dni * cosz
+
+    direct_horizontal = (dni * cosz).clip(lower=0.0)
+    diffuse_horizontal = dhi.clip(lower=0.0)
+
+    return { 
+        "direct_shortwave": direct_horizontal,
+        "diffuse_shortwave": diffuse_horizontal,
+    }

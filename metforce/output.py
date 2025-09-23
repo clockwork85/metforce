@@ -21,7 +21,7 @@ def create_header(location_name: str, latitude: float, longitude: float, elevati
     return header
 
 
-def write_met_data(met_df: pd.DataFrame, outfile: str, header: str, parameters: Parameters) -> None:
+def write_met_data(met_df: pd.DataFrame, outfile: str, header: str, parameters: Parameters, write_source: bool = False) -> None:
     """
     Writes the met data to the output file.
 
@@ -62,15 +62,16 @@ def write_met_data(met_df: pd.DataFrame, outfile: str, header: str, parameters: 
         f.write('\n')
 
         # Write the sources
-        for col in met_df.columns:
-            if col == 'day':
-                f.write('# Sources - ')
-            elif col == 'hour' or col == 'minute':
-                continue
-            else:
-                source = parameters.get(col, {}).get('source', '-')
-                f.write(f"{source:<{max_lengths[col]}}")
-        f.write('\n')
+        if write_source:
+            for col in met_df.columns:
+                if col == 'day':
+                    f.write('# Sources - ')
+                elif col == 'hour' or col == 'minute':
+                    continue
+                else:
+                    source = parameters.get(col, {}).get('source', '-')
+                    f.write(f"{source:<{max_lengths[col]}}")
+            f.write('\n')
 
         for index, row in met_df.iterrows():
             for col, item in zip(met_df.columns, row):
