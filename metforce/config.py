@@ -16,6 +16,18 @@ from metforce.defaults import (
 )
 from metforce.logger_config import logger
 
+class WindConfig(BaseModel):
+    """ Wind averaging configuration. """
+    avg_method: str= Field("legacy_scalar", description="Wind averaging: 'legacy_scalar' or 'vector'")
+    calm_threshold_mps: float = Field(0.2, ge=0.0, description="Calm threshold; direction becomes NaN below this speed")
+
+    @validator("avg_method")
+    def _check_method(cls, v: str) -> str:
+        allowed = ["legacy_scalar", "vector"]
+        if v not in allowed:
+            raise ValueError(f"wind.avg_method must be one of {allowed}")
+        return v
+
 class RequiredConfig(BaseModel):
     """Required Metforce configuration parameters"""
 
@@ -101,6 +113,7 @@ class MetforceConfig(BaseModel):
     required: RequiredConfig
     optional: OptionalConfig
     parameters: ParametersConfig
+    wind: WindConfig = Field(default_factory=WindConfig)
 
     @root_validator(pre=True)
     def fill_in_default_met(cls, values: Dict[str, Any]) -> Dict[str, Any]:

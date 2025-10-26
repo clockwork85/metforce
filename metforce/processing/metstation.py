@@ -1,6 +1,7 @@
 import datetime
 from typing import Dict, List, Optional, Union
 
+import numpy as np
 import pandas as pd
 import pytz
 
@@ -59,21 +60,63 @@ def build_metstation_df(met_key: Dict[str, str], metdata: pd.DataFrame, date_ran
                 raise e
     return met_station_df
 
-def fill_in_missing_metdata(metdata: pd.DataFrame, met_key: Dict[str, str], date_range: pd.DatetimeIndex,
-                            metstation_freq: str, interp_method: str) -> pd.DataFrame:
+def fill_in_missing_metdata(
+        metdata: pd.DataFrame,
+        met_key: Dict[str, str],
+        date_range: pd.DatetimeIndex,
+        metstation_freq: str,
+        interp_method: str,
+        wind_avg_method: str = "legacy_scalar",
+        calm_threshold_mps: float = 0.2,
+) -> pd.DataFrame:
 
     metdata = metdata[met_key.values()]
     for col in metdata.columns:
         metdata.loc[:, col] = pd.to_numeric(metdata.loc[:, col], errors='coerce')
 
+    col_to_param: dict[str, str] = {v: k for k, v in met_key.items()}
+
+    met_native = metdata.resample(metstation_freq).interpolate(method=interp_method)
+
     aggregation_methods = {col: ('sum' if col in met_key.values() and met_key.get(col) == 'precipitation' else 'mean')
                            for col in metdata.columns}
 
-    metdata = metdata.resample(metstation_freq).interpolate(method=interp_method)
-    logger.trace(f"metdata after interpolate: {metdata}")
-    metdata = metdata.resample(date_range.freq).aggregate(aggregation_methods)
-    logger.trace(f"metdata after resample: {metdata}")
-    return metdata.reindex(date_range)
+    met_agg = met_native.resample(date_range.freq).aggregate(aggregation_methods)
+    logger.trace(f"metdata after interpolate: {met_agg}")
+
+    if wind_avg_method == "vector":
+        spd_col = met_key.get("wind_speed")
+        dir_col = met_key.get("wind_direction")
+
+        if spd_col in met_native.columns and dir_col in met_native.columns:
+            spd_native = met_native[spd_col].to_numpy(dtype=float)
+            dir_native = met_native[dir_col].to_numpy(dtype=float)
+            th_rad     = np.deg2rad(dir_native)
+
+            u_native = -spd_native * np.sin(th_rad)
+            v_native = spd_native * np.cos(th_rad)
+
+            u_series = pd.Series(u_native, index=met_native.index)
+            v_series = pd.Series(v_native, index=met_native.index)
+
+            # Mean components over the output bins
+            u_bar = u_series.resample(date_range.freq).mean().reindex(date_range)
+            v_bar = v_series.resample(date_range.freq).mean().reindex(date_range)
+
+            # Back to speed and meteorological FROM direction
+            spd_vec = np.hypot(u_bar, v_bar)
+            dir_vec = (np.degrees(np.arctan2(-u_bar, -v_bar)) % 360.0)
+
+            # Calm bins: direction -> NaN
+            dir_vec = dir_vec.where(spd_vec >= float(calm_threshold_mps), np.nan)
+
+            # Override the scalar-mean results with the vector-mean winds
+            met_agg.loc[:, spd_col] = spd_vec.to_numpy()
+            met_agg.loc[:, dir_col] = dir_vec.to_numpy()
+        else:
+            logger.debug("Vector-mean requested but wind columns not present; falling back to scalar means.")
+
+    return met_agg.reindex(date_range)
 
 # Read Met Data
 def read_metstation_data(metfile: str) -> Union[pd.DataFrame, None]:
