@@ -14,7 +14,7 @@ def _to_numpy(x: Iterable) -> np.ndarray:
     return arr
 
 
-def vector_mean_from_sample(
+def vector_mean_from_samples(
         speed_mps: Iterable[float],
         from_dir_deg: Iterable[float],
         calm_threshold_mps: float = 0.2

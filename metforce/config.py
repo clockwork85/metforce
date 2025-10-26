@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Optional, Dict
 
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 import toml
 
 from metforce.data_types import Parameters
@@ -21,7 +21,8 @@ class WindConfig(BaseModel):
     avg_method: str= Field("legacy_scalar", description="Wind averaging: 'legacy_scalar' or 'vector'")
     calm_threshold_mps: float = Field(0.2, ge=0.0, description="Calm threshold; direction becomes NaN below this speed")
 
-    @validator("avg_method")
+    @field_validator("avg_method")
+    @classmethod
     def _check_method(cls, v: str) -> str:
         allowed = ["legacy_scalar", "vector"]
         if v not in allowed:
@@ -43,7 +44,8 @@ class RequiredConfig(BaseModel):
         description="End date of the meteorological data in '%Y-%m-%d %H:%M' format",
     )
 
-    @validator("start_range", "end_range", pre=True)
+    @field_validator("start_range", "end_range", mode="before")
+    @classmethod
     def parse_dates(cls, v):
         try:
             return datetime.strptime(v, "%Y-%m-%d %H:%M").strftime("%Y-%m-%d %H:%M")
@@ -80,24 +82,22 @@ class OptionalConfig(BaseModel):
         description="Frequency of the met station data",
     )
 
-    @root_validator(pre=True)
-    def fill_optional(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        optional = values
-        if optional is None:
-            logger.info(
-                "No optional parameters specified, using default optional parameters"
-            )
-            values = default_optional_met
+    @model_validator(mode="before")
+    @classmethod
+    def fill_optional(cls, values: dict[str, Any]) -> dict[str, Any]:
+        incoming = dict(values or {})
+        if not incoming:
+            logger.info("No optional parameters specified, using defaults")
+            incoming = dict(default_optional_met)
 
-        for default_param in default_optional_met.keys():
-            if default_param not in optional:
-                logger.debug(
-                    f"Parameter {default_param} not in default optional met parameters, using default optional met parameters"
-                )
-                values[default_param] = default_optional_met[default_param]
+        # apply defaults for any missing keys
+        for k, v in default_optional_met.items():
+            if k not in incoming:
+                logger.debug(f"Parameter {k} missing; using default")
+                incoming[k] = v
 
-        logger.debug(f"Optional parameters: {values}")
-        return values
+        logger.debug(f"Optional parameters: {incoming}")
+        return incoming
 
 
 class ParametersConfig(BaseModel):
@@ -115,61 +115,47 @@ class MetforceConfig(BaseModel):
     parameters: ParametersConfig
     wind: WindConfig = Field(default_factory=WindConfig)
 
-    @root_validator(pre=True)
+    @model_validator(mode="before")
+    @classmethod
     def fill_in_default_met(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        parameters = values.get("parameters")
-        metfile = (
-            values.get("optional", {}).get("metfile")
-            if values.get("optional")
-            else None
-        )
+        vals = dict(values or {})
+        parameters = vals.get("parameters")
+        metfile = (vals.get("optional") or {}).get("metfile") if vals.get("optional") else None
 
-        # Checking if parameters are not provided but a metfile is provided
+        # If no parameters but metfile provided -> default met (station)
         if parameters is None and metfile:
             logger.info("No parameters specified, using default met parameters")
-            values["parameters"] = default_met
-            parameters = values.get("parameters")
+            vals["parameters"] = default_met
+            parameters = vals["parameters"]
 
-        # Checking if parameters and metfile are not provided
+        # If neither parameters nor metfile -> GRIB/NLDAS defaults
         if parameters is None and metfile is None:
-            logger.info(
-                "No parameters specified and no metfile, using all GRIB parameters"
-            )
-            values["parameters"] = default_met_grib
-            parameters = values.get("parameters")
+            logger.info("No parameters specified and no metfile; using GRIB defaults")
+            vals["parameters"] = default_met_grib
+            parameters = vals["parameters"]
 
-        # Checking for parameters that were not provided
-        for default_param in default_met.keys():
-            logger.trace(f"Checking if {default_param} is in {parameters}")
-            if default_param not in parameters:
-                logger.debug(
-                    f"Parameter {default_param} not in default met parameters, using default met parameters"
-                )
-                parameters[default_param] = default_met[default_param]
+        # Fill missing parameter entries
+        for p in list(default_met.keys()):
+            if p not in parameters:
+                logger.debug(f"Parameter {p} missing; using default")
+                parameters[p] = default_met[p]
 
-        # Checking for source and key for each parameter - filling in defaults if not provided
+        # Fill per-parameter source/key/fraction defaults
         for param, settings in parameters.items():
             source = settings.get("source")
             if source is None:
-                logger.debug("No source specified, using default met source")
                 settings["source"] = default_met_sources[param]
-            if source == "met" and not settings.get("key"):
+            if settings["source"] == "met" and not settings.get("key"):
                 settings["key"] = default_met_keys[param]
-                logger.debug(f"No key specified for {param}, using default met key {settings['key']}")
             if source == "global_fraction" and not settings.get("fraction"):
-                logger.warning(f"No fraction specified for {param}, using default percentage")
                 settings["fraction"] = default_global_fraction[param]["fraction"]
-            if source == "global_coszenith" and param == 'direct_shortwave' and not settings.get("fraction"):
-                logger.trace(f"{settings=}")
-                logger.warning(f"No fraction specified for {param}, using default percentage with {default_global_coszenith[param]['fraction']}")
+            if source == "global_coszenith" and param == "direct_shortwave" and not settings.get("fraction"):
                 settings["fraction"] = default_global_coszenith[param]["fraction"]
-            logger.trace(f"Param: {param} - Settings: {settings}")
             parameters[param] = settings
 
-        values["parameters"] = {"parameters": parameters}
-        logger.trace(f"Parameters: {values['parameters']}")
-
-        return values
+        # Ensure nesting matches ParametersConfig shape
+        vals["parameters"] = {"parameters": parameters}
+        return vals
 
 
 def parse_config(file_path: str) -> MetforceConfig:
