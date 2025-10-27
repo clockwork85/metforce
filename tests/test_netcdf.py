@@ -1,7 +1,15 @@
 from __future__ import annotations
+
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    message=r"numpy\.ndarray size changed, may indicate binary incompatibility",
+    category=RuntimeWarning,
+)
+
 """Tests for the NetCDF backend.
 
-We keep two categories:
+We keep two categories:
 
 * **Fast, synthetic tests** – run unconditionally, never touch the
   network.  They work with either a *pandas* **or** *polars* DataFrame
@@ -10,11 +18,11 @@ We keep two categories:
   real NLDAS granule.  They only run when the environment variable
   ``NETCDF_LIVE=1`` is set.
 """
+
 from pathlib import Path
 from typing import Any
 import os
 
-import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
@@ -61,9 +69,8 @@ def _to_pandas(df: Any) -> pd.DataFrame:
 # Fixtures – synthetic data
 # -----------------------------------------------------------------------------
 
-@pytestmark_live  # runtime skip unless env‑var is set
 @pytest.fixture(scope="module")  # pragma: no cover – live only
-def live_netcdf(tmp_path_factory) -> Path:  # type: ignore[override](tmp_path_factory) -> Path:  # type: ignore[override]
+def live_netcdf(tmp_path_factory) -> Path:
     """Download one real NLDAS granule (NetCDF) for live testing.
 
     Skips automatically if the required NetCDF backend (``netcdf4`` or

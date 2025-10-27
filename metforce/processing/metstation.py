@@ -1,5 +1,6 @@
 import datetime
-from typing import Dict, List, Optional, Union
+import os
+from typing import Dict, List, Optional, Union, Tuple
 
 import numpy as np
 import pandas as pd
@@ -7,6 +8,7 @@ import pytz
 
 from metforce.data_types import Parameters
 from metforce.logger_config import logger
+
 
 # Function for Met Station data processing
 def process_metstation_data(parameters: Parameters, metdata: Optional[pd.DataFrame],
@@ -16,6 +18,35 @@ def process_metstation_data(parameters: Parameters, metdata: Optional[pd.DataFra
     if metdata is None:
         logger.debug("No met station data provided")
         return None
+
+    # Optional: best-effort units sniff from the original Excel header+units rows
+    try:
+        if os.getenv("MF_UNITS_SNIFF") == "1":
+            _mf = os.getenv("METFORCE_METFILE")
+            if _mf:
+                hdr = (
+                    pd.read_excel(_mf, nrows=1, header=None)
+                    .iloc[0]
+                    .astype(str)
+                    .tolist()
+                )
+                units_row = (
+                    pd.read_excel(_mf, nrows=2, header=None)
+                    .iloc[1]
+                    .astype(str)
+                    .tolist()
+                )
+                col_to_units: dict[str, str] = {}
+                for p, k in met_key.items():
+                    if k in hdr:
+                        j = hdr.index(k)
+                        col_to_units[k] = units_row[j] if j < len(units_row) else "?"
+                if col_to_units:
+                    logger.debug("[units] met columns → {}", col_to_units)
+    except Exception as _e:
+        logger.debug(
+            "[units] best-effort units sniff failed: {}: {}", type(_e).__name__, _e
+        )
 
     met_key = {key: value["key"] for key, value in parameters.items() if value["source"] == "met"}
 
@@ -69,7 +100,6 @@ def fill_in_missing_metdata(
         wind_avg_method: str = "legacy_scalar",
         calm_threshold_mps: float = 0.2,
 ) -> pd.DataFrame:
-
     # keep only columns we intend to resample; coerce numeric
     metdata = metdata[met_key.values()]
     for col in metdata.columns:

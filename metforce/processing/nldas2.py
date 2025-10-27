@@ -13,6 +13,7 @@ import earthaccess as ea
 from metforce.logger_config import logger
 from metforce.processing.util import check_for_missing_dates
 from metforce.data_types import Parameters  # or define your own type alias
+from metforce.physics.wind import resample_wind_vector_mean
 
 ###############################################################################
 # 0) Earthaccess login helper
@@ -365,6 +366,8 @@ def process_nldas2_data(
     pull_nldas2: bool,
     cleanup_folder: bool,
     interp_method: Optional[str] = None,
+    wind_avg_method: str = "legacy_scalar",
+    calm_threshold_mps: float = 0.2,
     **ea_search_kwargs: Any,
 ) -> Optional[pd.DataFrame]:
     """
@@ -409,5 +412,68 @@ def process_nldas2_data(
         logger.warning("NLDAS2 DataFrame is empty after build.")
         return None
 
+    # Phase 1.5: if needed, coarsen to the desired cadence.
+    # (No effect when source cadence == target cadence.)
+    try:
+        nldas2_df = _coarsen_nldas2_df_to_date_range(
+            nldas2_df, date_range, nldas2_params,
+            wind_avg_method=wind_avg_method,
+            calm_threshold_mps=calm_threshold_mps,
+        )
+    except Exception as exc:
+        logger.debug(f"Skipping NLDAS coarsening due to {exc!r}")
+
     return nldas2_df
 
+def _coarsen_nldas2_df_to_date_range(
+    df: pd.DataFrame,
+    date_range: pd.DatetimeIndex,
+    parameters: list[str],
+    *,
+    wind_avg_method: str = "legacy_scalar",
+    calm_threshold_mps: float = 0.2,
+) -> pd.DataFrame:
+    """
+    Coarsen an hourly (or finer) NLDAS2 dataframe to the cadence of `date_range`,
+    using vector-mean for wind if wind_avg_method='vector', mean for most scalars,
+    and sum for precipitation. Index is aligned to `date_range`.
+
+    If wind_avg_method='legacy_scalar' or the source cadence matches target cadence,
+    returns `df.reindex(date_range)` with no aggregation.
+    """
+    # If target freq equals source, just align index
+    src_freq = pd.infer_freq(df.index)
+    tgt_freq = date_range.freqstr if date_range.freq is not None else None
+    if src_freq == tgt_freq or tgt_freq is None:
+        return df.reindex(date_range)
+
+    # Aggregation for non-wind columns
+    agg_map: dict[str, str] = {}
+    for p in parameters:
+        if p == "precipitation" and p in df.columns:
+            agg_map[p] = "sum"
+        elif p not in ("wind_speed", "wind_direction") and p in df.columns:
+            agg_map[p] = "mean"
+
+    # Start with non-wind
+    out = pd.DataFrame(index=date_range)
+    if agg_map:
+        coarsened = df[agg_map.keys()].resample(date_range.freq).aggregate(agg_map)
+        out.loc[:, coarsened.columns] = coarsened.reindex(date_range)
+
+    # Then wind
+    has_wind = ("wind_speed" in df.columns) and ("wind_direction" in df.columns)
+    if has_wind:
+        if wind_avg_method == "vector":
+            spd_vec, dir_vec = resample_wind_vector_mean(
+                df["wind_speed"], df["wind_direction"], date_range,
+                calm_threshold_mps=calm_threshold_mps,
+            )
+            out["wind_speed"] = spd_vec
+            out["wind_direction"] = dir_vec
+        else:
+            # legacy: scalar means (kept for completeness; typically we wouldn't coarsen in legacy mode)
+            out["wind_speed"] = df["wind_speed"].resample(date_range.freq).mean().reindex(date_range)
+            out["wind_direction"] = df["wind_direction"].resample(date_range.freq).mean().reindex(date_range)
+
+    return out
