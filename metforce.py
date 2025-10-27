@@ -11,7 +11,7 @@ import pandas as pd
 from metforce.config import parse_config
 from metforce.data_types import Parameters
 from metforce.logger_config import logger, set_loglevel
-from metforce.output import create_header, write_met_data
+from metforce.output import create_header, write_met_data, build_netcdf_dataset, write_netcdf, write_outputs
 from metforce.processing import merge_and_prepare_for_output
 from metforce.processing.metstation import read_metstation_data
 from metforce.sources import Source, source_strategies
@@ -184,8 +184,29 @@ def _cli() -> None:
     )
     logger.debug(f"Header prepared:\n{header}")
 
-    write_met_data(met_df, opt.outfile, header, params)
-    logger.success(f"Finished processing met data → {opt.outfile}")
+    out_fmt = getattr(cfg, "output", None).format if hasattr(cfg, "output") else "met"
+
+    netcdf_meta = {
+        "title": getattr(cfg.output, "title", None)
+                 or f"{opt.location_name or 'Location'} met forcing {req.start_range} to {req.end_range}",
+        "institution": getattr(cfg.output, "institution", None) or "MetForce",
+        "references": getattr(cfg.output, "references", None),
+        "latitude": req.latitude,
+        "longitude": req.longitude,
+        "elevation_m": req.elevation,
+    }
+
+
+    # -- write legacy .met if requested (default) ---
+    write_outputs(
+        met_df,
+        outfile_met=Path(opt.outfile) if out_fmt in {"met", "both"} else None,
+        outfile_nc=Path(opt.outfile).with_suffix(".nc") if out_fmt in {"netcdf", "both"} else None,
+        output_format=out_fmt,
+        netcdf_meta=netcdf_meta,
+        header=header,
+        parameters=params,
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover – entry‑point guard

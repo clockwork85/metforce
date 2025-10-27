@@ -16,6 +16,22 @@ from metforce.defaults import (
 )
 from metforce.logger_config import logger
 
+class OutputConfig(BaseModel):
+    """Output selection and NetCDF metadata"""
+
+    format: str = Field("met", description="'met' | 'netcdf' | 'both'")
+    title: str | None = None
+    institution: str | None = None
+    references: str | None = None
+
+    @field_validator("format")
+    @classmethod
+    def _check_format(cls, v: str) -> str:
+        allowed = {"met", "netcdf", "both"}
+        if v not in allowed:
+            raise ValueError(f"Invalid format: {v}")
+        return v
+
 class WindConfig(BaseModel):
     """ Wind averaging configuration. """
     avg_method: str= Field("legacy_scalar", description="Wind averaging: 'legacy_scalar' or 'vector'")
@@ -114,6 +130,7 @@ class MetforceConfig(BaseModel):
     optional: OptionalConfig
     parameters: ParametersConfig
     wind: WindConfig = Field(default_factory=WindConfig)
+    output: OutputConfig = Field(default_factory=OutputConfig)
 
     @model_validator(mode="before")
     @classmethod
