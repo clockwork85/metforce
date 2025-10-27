@@ -10,3 +10,14 @@ data/
 *__pycache__
 *.spv
 metforce.egg-info/
+.DS_Store
+*.png
+nldas_tmp/
+*.xml
+*.asy
+*.grb
+hello.py
+*.svg
+*.mmd
+*.zip
+*.eps
