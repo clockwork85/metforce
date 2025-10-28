@@ -12,8 +12,52 @@ from metforce.logger_config import logger
 
 Parameters = Dict[str, Dict[str, Any]]
 
+# --- QC provenance map ----------------------------------------------------------
+_QC_CODE_BY_SOURCE = {
+    "met": 1,
+    "nldas2": 4,
+    "grib": 4,
+    "pvlib": 3,
+    "global_fraction": 3,
+    "global_coszenith": 3,
+}
+_QC_DEFAULT = 7
+_QC_MISSING = 9
 
-def build_netcdf_dataset(met_df: pd.DataFrame, meta: Mapping[str, Any] | None = None) -> xr.Dataset:
+# --- Param -> CF var name map (only those we export today) ----------------------
+_PARAM_TO_CF = {
+    "pressure": "air_pressure",
+    "temperature": "air_temperature",
+    "relative_humidity": "relative_humidity",
+    "wind_speed": "wind_speed",
+    "wind_direction": "wind_from_direction",
+    "precipitation": "precipitation_amount",
+    "global_shortwave": "surface_downwelling_shortwave_flux_in_air",
+    "direct_shortwave": "surface_direct_downwelling_shortwave_flux_in_air",
+    "diffuse_shortwave": "surface_diffuse_downwelling_shortwave_flux_in_air",
+    "downwelling_lwir": "surface_downwelling_longwave_flux_in_air",
+    # note: zenith/azimuth not yet written as CF vars in this slice
+}
+
+# --- Core coverage set (only variables that exist in the dataset are counted) ---
+_CORE_VARS = [
+    "air_pressure",
+    "air_temperature",
+    "relative_humidity",
+    "wind_speed",
+    "wind_from_direction",
+    "precipitation_amount",
+    "surface_downwelling_shortwave_flux_in_air",
+    "surface_downwelling_longwave_flux_in_air",
+]
+_COVERAGE_THRESHOLD = 0.80
+
+def build_netcdf_dataset(
+        met_df: pd.DataFrame,
+        meta: Mapping[str, Any] | None = None,
+        *,
+        parameters: Mapping[str, Mapping[str, Any]] | None = None,
+) -> xr.Dataset:
     """
     Build a minimal xarray
     """
@@ -169,6 +213,49 @@ def build_netcdf_dataset(met_df: pd.DataFrame, meta: Mapping[str, Any] | None = 
             col("LWdwn").to_numpy(dtype=float),
             {"standard_name": "surface_downwelling_longwave_flux_in_air", "long_name": "downwelling longwave flux", "units": "W m-2", "cell_methods": "time: mean"},
         )
+
+    # Convenience variables
+    iso = pd.to_datetime(time).strftime("%Y-%m-%dT%H:%M:%SZ")
+    _var("iso_time", np.array(iso, dtype=object), {"long_name": "timestamp ISO8601 (UTC)"})
+    _var("day_of_year", pd.Series(time).dt.dayofyear.to_numpy(),
+         {"long_name": "day of year (1..366)", "units": "1"})
+
+    # QC flags (if parameters mapping is supplied)
+    if parameters:
+        # Build per-CF-var base code from the config sources
+        base_code_for_cf: dict[str, int] = {}
+        for p_name, p_meta in parameters.items():
+            cf = _PARAM_TO_CF.get(p_name)
+            if not cf or cf not in ds:
+                continue
+            src = str(p_meta.get("source", "")).lower()
+            base_code_for_cf[cf] = _QC_CODE_BY_SOURCE.get(src, _QC_DEFAULT)
+
+        # Add qc_flag_<var> arrays
+        for cf_var, code in base_code_for_cf.items():
+            qc = np.full(ds.sizes["time"], code, dtype=np.int8)
+            vals = ds[cf_var].values
+            if np.issubdtype(vals.dtype, np.floating):
+                qc[np.isnan(vals)] = _QC_MISSING
+            ds[f"qc_flag_{cf_var}"] = xr.DataArray(qc, dims=("time",))
+            ds[f"qc_flag_{cf_var}"].attrs.update({
+                "long_name": f"quality flag for {cf_var}",
+                "flag_values": [1, 3, 4, 7, 9],
+                "flag_meanings": "station derived nldas2 unknown missing",
+            })
+
+    # Coverage gate (only count core vars that actually exist)
+    present_core = [v for v in _CORE_VARS if v in ds]
+    if present_core:
+        coverages = []
+        for v in present_core:
+            arr = ds[v].values
+            valid = np.count_nonzero(~np.isnan(arr)) if np.issubdtype(arr.dtype, np.floating) else arr.size
+            frac = float(valid) / float(arr.size)
+            coverages.append(frac)
+        min_frac = float(min(coverages)) if coverages else 1.0
+        ds.attrs["coverage_min_fraction_core"] = min_frac
+        ds.attrs["coverage_ok"] = int(min_frac >= _COVERAGE_THRESHOLD)
 
     return ds
 
