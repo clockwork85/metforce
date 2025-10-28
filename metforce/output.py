@@ -295,6 +295,7 @@ def write_outputs(
     netcdf_meta: Mapping[str, Any] | None = None,
     header: str | None = None,
     parameters: Parameters | None = None,
+    netcdf_engine: str | None = None,
 ) -> None:
     """
     Unified writer: writes legacy .met, NetCDF, or both.
@@ -311,7 +312,7 @@ def write_outputs(
 
     if output_format in {"netcdf", "both"} and outfile_nc is not None:
         ds = build_netcdf_dataset(met_df, meta=netcdf_meta or {})
-        write_netcdf(ds, outfile_nc)
+        write_netcdf(ds, outfile_nc, engine=netcdf_engine or "netcdf4"),
         wrote = True
 
     if not wrote:

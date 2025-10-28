@@ -15,6 +15,7 @@ from metforce.defaults import default_col_names
 def _read_met(path: Path, *, expected_cols: list[str]) -> pl.DataFrame:
     ncols = len(expected_cols)
     data_rows: list[list[str]] = []
+    started = False
 
     def is_data_row(tokens: list[str]) -> bool: 
         if len(tokens) != ncols: 
@@ -38,8 +39,9 @@ def _read_met(path: Path, *, expected_cols: list[str]) -> pl.DataFrame:
     if not data_rows: 
         raise AssertionError(f"No data rows recognized in {path}")
 
-    # Name all columns on creation; no int-index selectors needed
-    df = pl.DataFrame(data_rows, orient="row", schema=expected_cols)
+    df = pl.DataFrame(data_rows, orient="row")
+
+    df = df.rename({old: new for old, new in zip(df.columns, expected_cols)})
 
     # cast types by name
     numeric_cols = [c for c in expected_cols if c not in {"Day", "Hr", "Min"}]
