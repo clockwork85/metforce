@@ -85,9 +85,7 @@ def build_netcdf_dataset(
       - internal param names like 'pressure', 'direct_shortwave', ...
 
     Direct irradiance policy:
-      * We *always* emit the horizontal direct variable
-        'surface_direct_downwelling_shortwave_flux_in_air' (BHI).
-      * We also emit 'surface_direct_along_beam_shortwave_flux_in_air' (DNI).
+      * We also emit 'surface_direct_along_beam_normal_shortwave_flux_in_air' (DNI).
       * If zenith is available, BHI = DNI·cos(zenith).
         Otherwise BHI falls back to the provided direct values (assumed DNI)
         and carries a clarifying comment.
@@ -205,14 +203,14 @@ def build_netcdf_dataset(
 
     # --- Direct short-wave: publish DNI (along-beam) only ---------------------
     if _has_col("direct_shortwave"):
-        _var("surface_direct_along_beam_shortwave_flux_in_air", _vals_col("direct_shortwave"),
-             {"standard_name": "surface_direct_along_beam_shortwave_flux_in_air",
+        _var("surface_direct_along_beam_normal_shortwave_flux_in_air", _vals_col("direct_shortwave"),
+             {"standard_name": "surface_direct_along_beam_normal_shortwave_flux_in_air",
               "long_name": "direct shortwave flux (DNI, beam-normal)",
               "units": "W m-2", "cell_methods": "time: mean"})
 
         # Document policy in globals
         ds.attrs["direct_is_dni"] = 1
-        ds.attrs["direct_primary_var"] = "surface_direct_along_beam_shortwave_flux_in_air"
+        ds.attrs["direct_primary_var"] = "surface_direct_along_beam_normal_shortwave_flux_in_air"
 
 
     # Optional solar geometry (if present)
@@ -332,15 +330,7 @@ def write_outputs(
     if output_format in {"met", "both"} and outfile_met is not None:
         if header is None or parameters is None:
             raise ValueError("write_outputs: header and parameters are required for legacy '.met' output")
-        idx = pd.DatetimeIndex(met_df['time'].value)
-        param_df = met_df.copy()
-        param_df['day'] = idx.dayofyear
-        param_df['hour'] = idx.hour
-        param_df['minute'] = idx.minute
-        order = [k for k in default_col_names.keys() if k in param_df.columns]
-        final_df = param_df[order]
-        write_met_data(final_df, str(outfile_met), header, parameters={})
-        wrote = True
+        write_met_data(met_df, str(outfile_met), header=header, parameters=parameters)
 
     if output_format in {"netcdf", "both"} and outfile_nc is not None:
         ds = build_netcdf_dataset(
