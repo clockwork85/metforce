@@ -12,7 +12,8 @@ from metforce.logger_config import logger
 
 # Function for Met Station data processing
 def process_metstation_data(parameters: Parameters, metdata: Optional[pd.DataFrame],
-                             date_range: pd.DatetimeIndex, metstation_freq: str, interp_method: Optional[str]) \
+                             date_range: pd.DatetimeIndex, metstation_freq: str, interp_method: Optional[str],
+                            elevation: float | None = None) \
         -> Optional[pd.DataFrame]:
 
     if metdata is None:

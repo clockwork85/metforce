@@ -46,7 +46,7 @@ def test_core_mapping_and_units():
 
     for var in [
         "surface_downwelling_shortwave_flux_in_air",
-        "surface_direct_along_beam_normal_shortwave_flux_in_air",
+        "surface_direct_along_beam_shortwave_flux_in_air",
         "surface_diffuse_downwelling_shortwave_flux_in_air",
         "surface_downwelling_longwave_flux_in_air",
     ]:

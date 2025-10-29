@@ -23,7 +23,7 @@ _CF_TO_PARAM: dict[str, tuple[str, callable]] = {
     "wind_from_direction": ("wind_direction", lambda a: np.asarray(a, dtype=float)),    # degree
     "precipitation_amount": ("precipitation", lambda a: np.asarray(a, dtype=float)),    # kg m-2 == mm
     "surface_downwelling_shortwave_flux_in_air": ("global_shortwave",  lambda a: np.asarray(a, dtype=float)),
-    "surface_direct_along_beam_normal_shortwave_flux_in_air": ("direct_shortwave",  lambda a: np.asarray(a, dtype=float)),
+    "surface_direct_along_beam_shortwave_flux_in_air": ("direct_shortwave",  lambda a: np.asarray(a, dtype=float)),
     "surface_diffuse_downwelling_shortwave_flux_in_air": ("diffuse_shortwave", lambda a: np.asarray(a, dtype=float)),
     "surface_downwelling_longwave_flux_in_air": ("downwelling_lwir",  lambda a: np.asarray(a, dtype=float)),
 }

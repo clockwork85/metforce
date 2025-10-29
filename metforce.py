@@ -28,7 +28,6 @@ def process_met_data(
     end_range: str,
     parameters: Parameters,
     *,
-    # Optional / tweakable knobs
     metfile: str | None = None,
     tmp_data_folder: str | None = str(Path.cwd()) + "/metforce_tmp/",
     cleanup_folder: bool = False,
@@ -36,6 +35,7 @@ def process_met_data(
     pull_nldas2: bool = True,
     interp_method: str | None = None,
     metstation_freq: str | None = None,
+    elevation: float | None = None,
 ) -> pd.DataFrame:
     """High‑level workflow driver.
 
@@ -94,6 +94,9 @@ def process_met_data(
             "parameters": parameters,
             "date_range": date_range,
             "dataframes": dataframes,  # self‑reference for cross‑source ops
+            "latitude": latitude,
+            "longitude": longitude,
+            "elevation": elevation,
         },
         Source.BRUNT.value: {
             "parameters": parameters,
@@ -162,6 +165,7 @@ def _cli() -> None:
         pull_nldas2=getattr(opt, "pull_nldas2", True),
         interp_method=opt.interp_method,
         metstation_freq=opt.metstation_freq,
+        elevation=opt.elevation,
     )
 
     # Sanity check for NaNs ------------------------------------------------------

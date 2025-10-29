@@ -3,9 +3,11 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 from pvlib import irradiance as _pv_irr
+import pvlib
 
 from metforce.data_types import Parameters
 from metforce.logger_config import logger
+from metforce.physics.dew_point import dewpoint_from_t_rh
 
 def process_global_fraction(global_shortwave: pd.Series, fraction: float) -> pd.Series:
     return global_shortwave * fraction
@@ -17,8 +19,14 @@ def process_coszenith(global_shortwave: pd.Series, zenith: float, fraction: floa
     return {'direct_shortwave': direct_shortwave, 'diffuse_shortwave': diffuse_shortwave}
 
 # Function for Global data processing
-def process_global_data(parameters: Parameters, date_range: pd.DatetimeIndex,
-                        dataframes: Dict[str, pd.DataFrame]) -> Optional[pd.DataFrame]:
+def process_global_data(
+        parameters: Parameters,
+        date_range: pd.DatetimeIndex,
+        dataframes: dict[str, pd.DataFrame],
+        latitude: float | None = None,
+        longitude: float | None = None,
+        elevation: float | None = None,
+) -> Optional[pd.DataFrame]:
     """
     Create a DataFrame with any *derived* short‑wave columns requested
     in the configuration.
@@ -57,6 +65,15 @@ def process_global_data(parameters: Parameters, date_range: pd.DatetimeIndex,
         zenith_src = parameters["zenith"]["source"]
         zenith = dataframes[zenith_src]["zenith"]
         logger.debug(f"Using zenith from {zenith_src!r}")
+        temp_dew = None
+        if "temperature" in parameters and "relative_humidity" in parameters:
+            t_src = parameters["temperature"]["source"]
+            rh_src = parameters["relative_humidity"]["source"]
+            if t_src in dataframes and rh_src in dataframes:
+                temp_dew = dewpoint_from_t_rh(
+                    dataframes[t_src]["temperature"]["source"],
+                    dataframes[rh_src]["relative_humidity"]["source"]
+                )
 
     derived: dict[str, pd.Series] = {}
 
@@ -93,10 +110,17 @@ def process_global_data(parameters: Parameters, date_range: pd.DatetimeIndex,
 
         # Case 3 - pvlib-based physical models 
         elif src.startswith("pvlib_"):
-            method = src.split("_", maxsplit=1)[1]
-            if "direct_shortwave" not in derived or "diffuse_shortwave" not in derived:
-                derived.update(_pvlib_decompose(ghi, zenith, method))
-
+            method = src.split("_", 1)[1]  # disc|dirint|dirindex|erbs
+            dni_dhi = _pvlib_decompose(
+                ghi, zenith, method,
+                latitude=latitude, longitude=longitude, elevation=elevation,
+                times=ghi.index, temp_dew=temp_dew,
+            )
+            derived["direct_shortwave"] = dni_dhi["direct_shortwave"].reindex(date_range)
+            derived["diffuse_shortwave"] = dni_dhi["diffuse_shortwave"]
+            parameters["direct_shortwave"]["source"] = "pvlib_" + method
+            parameters["diffuse_shortwave"]["source"] = "pvlib_" + method
+            break
         else:
             raise ValueError(f"Unknown source specifier {src!r} for {param}")
 
@@ -225,6 +249,12 @@ def _pvlib_decompose(
         ghi: pd.Series,
         zenith: pd.Series,
         method: str,
+        *,
+        latitude: float | None = None,
+        longitude: float | None = None,
+        elevation: float | None = None,
+        times: pd.DatetimeIndex | None = None,
+        temp_dew: pd.Series | None = None
 ) -> dict[str, pd.Series]:
     """
     Split *global horizontal irradiance* (GHI) into direct and diffuse
@@ -255,9 +285,8 @@ def _pvlib_decompose(
     logger.debug(f"Running pvlib decomposition method {method!r}") 
     ghi, zenith = ghi.align(zenith, join='inner')
 
-    cosz = np.cos(np.radians(zenith.clip(upper=90.0)))
+    cosz = np.cos(np.radians(zenith.clip(upper=90.0))).where(lambda s: s > 0, 0.0)
     # Guard against negatives caused by zenith > 90.0 (night time)
-    cosz = cosz.where(cosz > 0, 0.0)
 
     method = method.lower()
 
@@ -267,8 +296,22 @@ def _pvlib_decompose(
     elif method == "dirint":
         dni = _pv_irr.dirint(ghi, zenith, ghi.index)
 
-    elif method == "dirindex": 
-        raise NotImplementedError(f"Not implemented yet, but will be soon")
+    elif method == "dirindex":
+        if any(v is None for v in (latitude, longitude, elevation)):
+            raise ValueError("DIRINDEX requires latitude, longitude, elevation")
+        ghi_cs, dni_cs = _get_clearsky_series(latitude, longitude, elevation, ghi.index)
+
+        pressure = float(_pv_irr.alt2pres(elevation)) * 100 # kPa -> Pa if needed by pvlib version
+        dni = _pv_irr.dirindex(
+            ghi=ghi,
+            ghi_clearsky=ghi_cs,
+            dni_clearsky=dni_cs,
+            zenith=zenith,
+            times=ghi.index,
+            pressure=pressure,
+            use_delta_kt_prime=True,
+            temp_dew=temp_dew,
+        )
 
     elif method == "erbs":
         df = _pv_irr.erbs(ghi, zenith, ghi.index)
@@ -281,16 +324,14 @@ def _pvlib_decompose(
                 f"Choose one of 'disc', 'dirint', 'dirindex', 'erbs'."
         )
 
-    dni = dni.fillna(0.0)
-
     if method != "erbs":
-        # energy balance: GHI = BHI + DHI 
-        dhi = ghi - dni * cosz
+        # energy balance: GHI = BHI + DHI
+        dhi = (ghi - dni * cosz).fillna(0.0).clip(lower=0.0)
 
-    direct_horizontal = (dni * cosz).clip(lower=0.0)
-    diffuse_horizontal = dhi.clip(lower=0.0)
+    dni = dni.fillna(0.0).clip(lower=0.0)
+    dhi = dhi.fillna(0.0).clip(lower=0.0)
 
     return { 
-        "direct_shortwave": direct_horizontal,
-        "diffuse_shortwave": diffuse_horizontal,
+        "direct_shortwave": dni,
+        "diffuse_shortwave": dhi,
     }

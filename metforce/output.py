@@ -33,6 +33,7 @@ _PARAM_TO_CF = {
     "wind_direction": "wind_from_direction",
     "precipitation": "precipitation_amount",
     "global_shortwave": "surface_downwelling_shortwave_flux_in_air",
+    "direct_shortwave": "surface_direct_along_beam_shortwave_flux_in_air",
     "diffuse_shortwave": "surface_diffuse_downwelling_shortwave_flux_in_air",
     "downwelling_lwir": "surface_downwelling_longwave_flux_in_air",
 }
@@ -203,14 +204,14 @@ def build_netcdf_dataset(
 
     # --- Direct short-wave: publish DNI (along-beam) only ---------------------
     if _has_col("direct_shortwave"):
-        _var("surface_direct_along_beam_normal_shortwave_flux_in_air", _vals_col("direct_shortwave"),
-             {"standard_name": "surface_direct_along_beam_normal_shortwave_flux_in_air",
+        _var("surface_direct_along_beam_shortwave_flux_in_air", _vals_col("direct_shortwave"),
+             {"standard_name": "surface_direct_along_beam_shortwave_flux_in_air",
               "long_name": "direct shortwave flux (DNI, beam-normal)",
               "units": "W m-2", "cell_methods": "time: mean"})
 
         # Document policy in globals
         ds.attrs["direct_is_dni"] = 1
-        ds.attrs["direct_primary_var"] = "surface_direct_along_beam_normal_shortwave_flux_in_air"
+        ds.attrs["direct_primary_var"] = "surface_direct_along_beam_shortwave_flux_in_air"
 
 
     # Optional solar geometry (if present)
