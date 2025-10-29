@@ -10,10 +10,8 @@ import pandas as pd
 import xarray as xr
 from pandas.tseries.frequencies import to_offset
 
-# Reuse your legacy writer to preserve byte-for-byte formatting.
-# These helpers already exist in your codebase. :contentReference[oaicite:0]{index=0}
 from metforce.output import create_header, write_met_data
-from metforce.defaults import default_col_names  # canonical column order :contentReference[oaicite:1]{index=1}
+from metforce.defaults import default_col_names
 
 
 # CF name -> (internal parameter name used by write_met_data, unit back-converter)
