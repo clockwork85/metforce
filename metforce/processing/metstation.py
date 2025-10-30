@@ -21,6 +21,8 @@ def process_metstation_data(parameters: Parameters, metdata: Optional[pd.DataFra
         return None
 
     # Optional: best-effort units sniff from the original Excel header+units rows
+    met_key = {key: value["key"] for key, value in parameters.items() if value["source"] == "met"}
+
     try:
         if os.getenv("MF_UNITS_SNIFF") == "1":
             _mf = os.getenv("METFORCE_METFILE")
@@ -48,8 +50,6 @@ def process_metstation_data(parameters: Parameters, metdata: Optional[pd.DataFra
         logger.debug(
             "[units] best-effort units sniff failed: {}: {}", type(_e).__name__, _e
         )
-
-    met_key = {key: value["key"] for key, value in parameters.items() if value["source"] == "met"}
 
     if metdata is not None:
         if interp_method is not None:

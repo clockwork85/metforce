@@ -2,12 +2,12 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-from pvlib import irradiance as _pv_irr
-import pvlib
 
 from metforce.data_types import Parameters
 from metforce.logger_config import logger
 from metforce.physics.dew_point import dewpoint_from_t_rh
+from metforce.physics.pressure import pressure_from_elevation_m
+from metforce.physics.solar_irradiance import decompose_shortwave
 
 def process_global_fraction(global_shortwave: pd.Series, fraction: float) -> pd.Series:
     return global_shortwave * fraction
@@ -23,6 +23,7 @@ def process_global_data(
         parameters: Parameters,
         date_range: pd.DatetimeIndex,
         dataframes: dict[str, pd.DataFrame],
+        *,
         latitude: float | None = None,
         longitude: float | None = None,
         elevation: float | None = None,
@@ -81,45 +82,68 @@ def process_global_data(
     for param in global_parameters:
         src = parameters[param]["source"]
 
-        # Case 1 : Naive percentage based split
-        if src.startswith("global_") and src.endswith("%"):
-            fraction = float(src.split("_")[1][:-1]) / 100.0
-            derived[param] = ghi * fraction
+        # Case 1: percentage-based split -> interpret as BHI fraction, then convert to DNI
+        # pretty much never use this anymore except for testing
+        if src == "global_fraction" or (src.startswith("global_") and src.endswith("%")):
+            if param == "direct_shortwave":
+                # choose fraction
+                if src == "global_fraction":
+                    fraction = parameters[param]["fraction"]
+                else:
+                    fraction = float(src.split("_")[1][:-1]) / 100.0
 
-        elif src == "global_fraction":
-            fraction = parameters[param]["fraction"]
-            derived[param] = ghi * fraction
+                # need zenith to go from BHI to DNI
+                zenith = dataframes[parameters["zenith"]["source"]]["zenith"]
+                ghi_aligned, zenith_aligned = ghi.align(zenith, join="inner")
+                cosz = np.cos(np.radians(zenith_aligned.clip(upper=90.0))).clip(min=0.0)
 
-        # Case 2 - fraction * cos(zenith)
+                # BHI = f * GHI; DNI = BHI / cosz (with safe handling at night)
+                bhi = (fraction * ghi_aligned).clip(lower=0.0)
+                dni = (bhi.where(cosz > 0.0, 0.0) / cosz.where(cosz > 0.0, 1.0)).clip(lower=0.0)
+                dhi = (ghi_aligned - bhi).clip(lower=0.0)
+
+                derived.update({
+                    "direct_shortwave": dni.reindex(date_range),
+                    "diffuse_shortwave": dhi.reindex(date_range),
+                })
+
+        # Case 2: fraction * cos(zenith) model — that gives BHI by construction; convert to DNI
+        # Pretty much never use this anymore except for testing - prefer PVLIB
         elif src == "global_coszenith":
             if param == "direct_shortwave":
                 zenith = dataframes[parameters["zenith"]["source"]]["zenith"]
                 fraction = parameters[param]["fraction"]
 
                 ghi_aligned, zenith_aligned = ghi.align(zenith, join="inner")
+                cosz = np.cos(np.radians(zenith_aligned.clip(upper=90.0))).clip(min=0.0)
 
-                direct = ghi_aligned * fraction * np.cos(np.radians(zenith_aligned))
-                diffuse = ghi_aligned - direct
+                bhi = (ghi_aligned * fraction * cosz).clip(lower=0.0)
+                dni = (bhi.where(cosz > 0.0, 0.0) / cosz.where(cosz > 0.0, 1.0)).clip(
+                    lower=0.0
+                )
+                dhi = (ghi_aligned - bhi).clip(lower=0.0)
+
                 derived.update(
-                        {
-                            "direct_shortwave": direct.reindex(date_range),
-                            "diffuse_shortwave": diffuse.reindex(date_range),
-                            }
-                        )
-                logger.debug(f"{derived=}")
+                    {
+                        "direct_shortwave": dni.reindex(date_range),
+                        "diffuse_shortwave": dhi.reindex(date_range),
+                    }
+                )
 
         # Case 3 - pvlib-based physical models 
         elif src.startswith("pvlib_"):
             method = src.split("_", 1)[1]  # disc|dirint|dirindex|erbs
-            dni_dhi = _pvlib_decompose(
-                ghi, zenith, method,
-                latitude=latitude, longitude=longitude, elevation=elevation,
-                times=ghi.index, temp_dew=temp_dew,
-            )
-            derived["direct_shortwave"] = dni_dhi["direct_shortwave"].reindex(date_range)
-            derived["diffuse_shortwave"] = dni_dhi["diffuse_shortwave"]
-            parameters["direct_shortwave"]["source"] = "pvlib_" + method
-            parameters["diffuse_shortwave"]["source"] = "pvlib_" + method
+            if "direct_shortwave" not in derived or "diffuse_shortwave" not in derived:
+                derived.update(
+                    decompose_shortwave(
+                        ghi,
+                        zenith,
+                        method=method,
+                        latitude=latitude,
+                        longitude=longitude,
+                        elevation_m=elevation
+                    )
+                )
             break
         else:
             raise ValueError(f"Unknown source specifier {src!r} for {param}")
@@ -226,112 +250,3 @@ def calculate_dlr_brunt(temp_celsius: pd.Series, relative_humidity: pd.Series) -
     emissivity = 0.785 - 0.00246 * temp_kelvin + 0.0000129 * temp_kelvin**2
     effective_emissivity = emissivity + 0.0224 * np.sqrt(vapor_pressure)
     return effective_emissivity * stefan_boltzmann_constant * temp_kelvin**4
-
-
-def _get_clearsky_series(
-        latitude: float,
-        longitude: float,
-        elevation: float,
-        times: pd.DatetimeIndex,
-) -> tuple[pd.Series, pd.Series]:
-    """Return (GHI_clear, DNI_clear) indexed like *times*."""
-    loc = pvlib.location.Location(latitude, longitude, altitude=elevation,
-                                  tz="UTC")
-    cs = loc.get_clearsky(
-        times,
-        model="ineichen",
-        perez_enhancement=True,
-    )
-    return cs["ghi"], cs["dni"]
-
-
-def _pvlib_decompose(
-        ghi: pd.Series,
-        zenith: pd.Series,
-        method: str,
-        *,
-        latitude: float | None = None,
-        longitude: float | None = None,
-        elevation: float | None = None,
-        times: pd.DatetimeIndex | None = None,
-        temp_dew: pd.Series | None = None
-) -> dict[str, pd.Series]:
-    """
-    Split *global horizontal irradiance* (GHI) into direct and diffuse
-    components using one of pvlib’s physical/empirical models.
-
-    Parameters
-    ----------
-    ghi
-        Global horizontal irradiance [W m‑2].
-    zenith
-        Solar zenith angle [degrees].
-    method
-        One of ``disc``, ``dirint``, ``dirindex`` or ``erbs``.
-
-    Returns
-    -------
-    dict
-        Keys ``direct_shortwave`` and ``diffuse_shortwave`` (horizontal plane),
-        both indexed exactly like *ghi*.
-
-    Notes
-    -----
-    - All models return **DNI** (beam normal). We convert to horizontal
-      by multiplying by ``cos(zenith in radians)``.  
-    - For *erbs* the pvlib routine already delivers **DHI**; in all other
-      cases DHI is back‑calculated by energy balance (GHI − BHI).
-    """
-    logger.debug(f"Running pvlib decomposition method {method!r}") 
-    ghi, zenith = ghi.align(zenith, join='inner')
-
-    cosz = np.cos(np.radians(zenith.clip(upper=90.0))).where(lambda s: s > 0, 0.0)
-    # Guard against negatives caused by zenith > 90.0 (night time)
-
-    method = method.lower()
-
-    if method == "disc":
-        dni = _pv_irr.disc(ghi, zenith, ghi.index)["dni"]
-
-    elif method == "dirint":
-        dni = _pv_irr.dirint(ghi, zenith, ghi.index)
-
-    elif method == "dirindex":
-        if any(v is None for v in (latitude, longitude, elevation)):
-            raise ValueError("DIRINDEX requires latitude, longitude, elevation")
-        ghi_cs, dni_cs = _get_clearsky_series(latitude, longitude, elevation, ghi.index)
-
-        pressure = float(_pv_irr.alt2pres(elevation)) * 100 # kPa -> Pa if needed by pvlib version
-        dni = _pv_irr.dirindex(
-            ghi=ghi,
-            ghi_clearsky=ghi_cs,
-            dni_clearsky=dni_cs,
-            zenith=zenith,
-            times=ghi.index,
-            pressure=pressure,
-            use_delta_kt_prime=True,
-            temp_dew=temp_dew,
-        )
-
-    elif method == "erbs":
-        df = _pv_irr.erbs(ghi, zenith, ghi.index)
-        dni = df["dni"]
-        dhi = df["dhi"].fillna(0.0)
-
-    else:
-        raise ValueError(
-                f"Unknown pvlib decomposition method {method!r}. "
-                f"Choose one of 'disc', 'dirint', 'dirindex', 'erbs'."
-        )
-
-    if method != "erbs":
-        # energy balance: GHI = BHI + DHI
-        dhi = (ghi - dni * cosz).fillna(0.0).clip(lower=0.0)
-
-    dni = dni.fillna(0.0).clip(lower=0.0)
-    dhi = dhi.fillna(0.0).clip(lower=0.0)
-
-    return { 
-        "direct_shortwave": dni,
-        "diffuse_shortwave": dhi,
-    }
