@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -6,7 +6,6 @@ import pandas as pd
 from metforce.data_types import Parameters
 from metforce.logger_config import logger
 from metforce.physics.dew_point import dewpoint_from_t_rh
-from metforce.physics.pressure import pressure_from_elevation_m
 from metforce.physics.solar_irradiance import decompose_shortwave
 
 def process_global_fraction(global_shortwave: pd.Series, fraction: float) -> pd.Series:
@@ -134,16 +133,20 @@ def process_global_data(
         elif src.startswith("pvlib_"):
             method = src.split("_", 1)[1]  # disc|dirint|dirindex|erbs
             if "direct_shortwave" not in derived or "diffuse_shortwave" not in derived:
-                derived.update(
-                    decompose_shortwave(
-                        ghi,
-                        zenith,
-                        method=method,
-                        latitude=latitude,
-                        longitude=longitude,
-                        elevation_m=elevation
-                    )
+                press_key = parameters["pressure"].get("key") or "BP_mbar"
+                pressure_pa = None
+                df_met = dataframes.get("MET") or dataframes.get("met")
+                if df_met is not None and press_key in df_met:
+                    pressure_pa = 100.0 * df_met[press_key].astype(float)
+                out = decompose_shortwave(
+                    ghi=ghi, zenith=zenith, method=method,
+                    latitude=latitude, longitude=longitude, elevation_m=elevation,
+                    pressure_pa=pressure_pa,
+                    temp_c=dataframes.get("Temp"),
+                    rh_percent=dataframes.get("RH"),
+                    use_delta_kt_prime=True,
                 )
+                derived.update(out)
             break
         else:
             raise ValueError(f"Unknown source specifier {src!r} for {param}")

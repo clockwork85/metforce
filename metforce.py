@@ -165,7 +165,7 @@ def _cli() -> None:
         pull_nldas2=getattr(opt, "pull_nldas2", True),
         interp_method=opt.interp_method,
         metstation_freq=opt.metstation_freq,
-        elevation=opt.elevation,
+        elevation=req.elevation,
     )
 
     # Sanity check for NaNs ------------------------------------------------------
