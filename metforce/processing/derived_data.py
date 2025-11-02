@@ -43,9 +43,11 @@ def process_global_data(
     These models run on the curve of the GHI, so we need to run on the entire 
     pd.Series to get sensical DNI
     """
+    derived_targets = ("direct_shortwave", "diffuse_shortwave")
     global_parameters = [
-            key for key in parameters 
-            if parameters[key]['source'].startswith(('global', 'pvlib_'))
+            key for key in parameters
+            if key in derived_targets
+            and parameters[key]['source'].startswith(('global', 'pvlib_'))
     ]
     if not global_parameters:
         return None
@@ -94,7 +96,7 @@ def process_global_data(
                 # need zenith to go from BHI to DNI
                 zenith = dataframes[parameters["zenith"]["source"]]["zenith"]
                 ghi_aligned, zenith_aligned = ghi.align(zenith, join="inner")
-                cosz = np.cos(np.radians(zenith_aligned.clip(upper=90.0))).clip(min=0.0)
+                cosz = np.cos(np.radians(zenith_aligned.clip(upper=90.0))).clip(lower=0.0)
 
                 # BHI = f * GHI; DNI = BHI / cosz (with safe handling at night)
                 bhi = (fraction * ghi_aligned).clip(lower=0.0)
