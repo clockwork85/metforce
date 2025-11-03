@@ -21,3 +21,5 @@ hello.py
 *.mmd
 *.zip
 *.eps
+*.nc
+planning/

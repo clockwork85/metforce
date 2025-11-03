@@ -4,7 +4,7 @@ from typing import Any, Optional, Dict
 from pydantic import BaseModel, Field, field_validator, model_validator
 import toml
 
-from metforce.data_types import Parameters
+from metforce.data_types import Parameters, ParameterConfig
 from metforce.defaults import (
     default_global_fraction,
     default_global_coszenith,
@@ -23,6 +23,9 @@ class OutputConfig(BaseModel):
     title: str | None = None
     institution: str | None = None
     references: str | None = None
+
+    instrument_library: str | None = Field(None, description="Path to custom instrument library TOML file (optional)")
+    comment: str | None = Field(None, description="Global dataset comment (optional")
 
     @field_validator("format")
     @classmethod
@@ -77,7 +80,7 @@ class OptionalConfig(BaseModel):
     metfile: Optional[str] = Field("met", description="Path to the met excel file")
     location_name: Optional[str] = Field(None, description="Name of the location - this can be any colloquial name as it is only used for the header of the output file")
     tmp_grib_folder: Optional[str] = Field(
-        "~/tmp_grib_folder", description="Path to the temporary grib folder"
+        "~/tmp_metdata_folder", description="Path to the temporary grib folder"
     )
     cleanup_folder: Optional[bool] = Field(
         False, description="Whether to cleanup the temporary grib folder"
@@ -94,7 +97,7 @@ class OptionalConfig(BaseModel):
     )
     metstation_freq: Optional[str] = Field(
         # https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases
-        "5T",
+        "5min",
         description="Frequency of the met station data",
     )
 
@@ -121,6 +124,43 @@ class ParametersConfig(BaseModel):
     parameters: Optional[Parameters] = Field(
         None, description="Dictionary of parameters to pull from which model"
     )
+
+    @field_validator("parameters", mode="before")
+    @classmethod
+    def _convert_parameter_configs(cls, v: Any) -> Any:
+        """ Convert ParameterConfig objects to dicts before field validation """
+        if v is None:
+            return v
+        if not isinstance(v, dict):
+            return v
+        normalized = {}
+        for k, v in v.items():
+            if isinstance(v, ParameterConfig):
+                normalized[k] = v.model_dump(exclude_none=True)
+            else:
+                normalized[k] = v
+
+        return normalized
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_parameters(cls, values: dict[str, Any]) -> dict[str, Any]:
+        """ Validate parameter dict structures """
+        vals = dict(values or {})
+        params = vals.get("parameters")
+
+        if params is None or not isinstance(params, dict):
+            return vals
+
+        for param_name, param_config in params.items():
+            if isinstance(param_config, dict):
+                try:
+                    ParameterConfig(**param_config)
+                except Exception as e:
+                    logger.warning(f"Parameter '{param_name}' validation warning: {e}")
+
+        return vals
+
 
 
 class MetforceConfig(BaseModel):
