@@ -50,6 +50,32 @@ _CORE_VARS = [
 ]
 _COVERAGE_THRESHOLD = 0.80
 
+def _detect_sources_from_parameters(parameters: dict[str, Any]) -> list[str]:
+    """
+    Detect unique data sources from parameters configuration.
+
+    Returns list of source identifiers for global 'source' attribute.
+    """
+    sources = set()
+
+    for param_config in parameters.values():
+        source = param_config.get("source", "").lower()
+
+        # Normalize source names
+        if source == "met" or source == "station":
+            sources.add("weather_station")
+        elif source == "nldas2":
+            sources.add("nldas2")
+        elif source.startswith("pvlib"):
+            sources.add("pvlib_model")
+        elif source == "global_fraction":
+            sources.add("derived")
+        elif source == "global_coszenith":
+            sources.add("derived")
+        elif source:
+            sources.add(source)
+
+    return sorted(sources)
 
 def _normalize_time_index(idx: pd.DatetimeIndex) -> pd.DatetimeIndex:
     """UTC‑normalize, monotonic, tz‑naive index for CF writing."""

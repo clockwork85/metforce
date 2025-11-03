@@ -67,15 +67,15 @@ def process_global_data(
         zenith_src = parameters["zenith"]["source"]
         zenith = dataframes[zenith_src]["zenith"]
         logger.debug(f"Using zenith from {zenith_src!r}")
-        temp_dew = None
-        if "temperature" in parameters and "relative_humidity" in parameters:
-            t_src = parameters["temperature"]["source"]
-            rh_src = parameters["relative_humidity"]["source"]
-            if t_src in dataframes and rh_src in dataframes:
-                temp_dew = dewpoint_from_t_rh(
-                    dataframes[t_src]["temperature"]["source"],
-                    dataframes[rh_src]["relative_humidity"]["source"]
-                )
+        # temp_dew = None
+        # if "temperature" in parameters and "relative_humidity" in parameters:
+        #     t_src = parameters["temperature"]["source"]
+        #     rh_src = parameters["relative_humidity"]["source"]
+        #     if t_src in dataframes and rh_src in dataframes:
+        #         temp_dew = dewpoint_from_t_rh(
+        #             dataframes[t_src]["temperature"],
+        #             dataframes[rh_src]["relative_humidity"]
+        #         )
 
     derived: dict[str, pd.Series] = {}
 
@@ -140,12 +140,26 @@ def process_global_data(
                 df_met = dataframes.get("MET") or dataframes.get("met")
                 if df_met is not None and press_key in df_met:
                     pressure_pa = 100.0 * df_met[press_key].astype(float)
+
+                temp_c_series = None
+                rh_percent_series = None
+
+                if "temperature" in parameters:
+                    t_src = parameters["temperature"]["source"]
+                    if t_src in dataframes and "temperature" in dataframes[t_src]:
+                        temp_c_series = dataframes[t_src]["temperature"]
+
+                if "relative_humidity" in parameters:
+                    rh_src = parameters["relative_humidity"]["source"]
+                    if rh_src in dataframes and "relative_humidity" in dataframes[rh_src]:
+                        rh_percent_series = dataframes[rh_src]["relative_humidity"]
+
                 out = decompose_shortwave(
                     ghi=ghi, zenith=zenith, method=method,
                     latitude=latitude, longitude=longitude, elevation_m=elevation,
                     pressure_pa=pressure_pa,
-                    temp_c=dataframes.get("Temp"),
-                    rh_percent=dataframes.get("RH"),
+                    temp_c=temp_c_series,
+                    rh_percent=rh_percent_series,
                     use_delta_kt_prime=True,
                 )
                 derived.update(out)

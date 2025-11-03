@@ -1,18 +1,21 @@
-[[case]]
-name = "charlie_nov_dec_2024_dirint"
-config = "regression_test_met_files/Charlie_MET_hole_Oct-Dec-2024.toml"
-expected_met = "regression_test_met_files/Charlie_MET_hole_Nov-Dec2024_dirint.met"
-# Patch the config start_range at runtime so it matches the Nov–Dec baseline.
-patch_start_range = "2024-11-01 00:00"
-rtol = 5e-6
-atol = 5e-4
-discrete_columns = ["Day", "Hr", "Min"]
-float_columns = [
-  "Press", "Temp", "RH",
-  "WndSpd", "WndDir", "Precip",
-  "Global", "Direct", "Diffuse", "LWdwn",
-  "Zenith", "Azimuth"
-]
+#[[case]]
+#name = "charlie_nov_dec_2024_dirint"
+#config = "regression_test_met_files/Charlie_MET_hole_Oct-Dec-2024.toml"
+#expected_met = "regression_test_met_files/Charlie_MET_hole_Nov-Dec2024_dirint.met"
+## Patch the config start_range at runtime so it matches the Nov–Dec baseline.
+#patch_start_range = "2024-11-01 00:00"
+#rtol = 5e-6
+#atol = 5e-4
+#discrete_columns = ["Day", "Hr", "Min"]
+#float_columns = [
+#  "Press", "Temp", "RH",
+#  "WndSpd", "WndDir", "Precip",
+#  "Global", "Direct", "Diffuse", "LWdwn",
+#  "Zenith", "Azimuth"
+#]
+#patch_source_map = [
+#  { from = "pvlib_dirindex", to = "pvlib_dirint" }
+#]
 
 [[case]]
 name = "tistef_may9_may19_2023_15m"

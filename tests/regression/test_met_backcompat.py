@@ -36,7 +36,8 @@ def _load_manifest() -> list[dict[str, Any]]:
         data = tomllib.load(f)
     return data.get("case", [])
 
-def _patch_config_text(text: str, *, start_range: str | None, outfile: Path) -> str:
+def _patch_config_text(text: str, *, start_range: str | None,
+                       patch_source_map: list | None = None, outfile: Path) -> str:
     """
     Idempotently set start_range (if provided) and force outfile into [optional].
     The outfile injection removes any existing 'outfile =' lines to avoid duplicate-key TOML errors.
@@ -74,12 +75,22 @@ def _patch_config_text(text: str, *, start_range: str | None, outfile: Path) -> 
     else:
         new += f'\n\n[optional]\noutfile = "{outfile.as_posix()}"\n'
 
+    if patch_source_map:
+        for replacement in patch_source_map:
+            from_str = replacement.get("from")
+            to_str = replacement.get("to")
+            if from_str and to_str:
+                from_quoted = f'"{from_str}"'
+                to_quoted = f'"{to_str}"'
+                new = new.replace(from_quoted, to_quoted)
+
     return new
 
 
-def _write_temp_config(orig_cfg: Path, tmp_dir: Path, *, patch_start: str | None, out_path: Path) -> Path:
+def _write_temp_config(orig_cfg: Path, tmp_dir: Path, *, patch_start: str | None,
+                       patch_source_map: list | None = None, out_path: Path) -> Path:
     text = orig_cfg.read_text(encoding="utf-8")
-    patched = _patch_config_text(text, start_range=patch_start, outfile=out_path)
+    patched = _patch_config_text(text, start_range=patch_start, patch_source_map=patch_source_map, outfile=out_path)
     tmp_cfg = tmp_dir / orig_cfg.name
     tmp_cfg.write_text(patched, encoding="utf-8")
     return tmp_cfg
@@ -315,7 +326,14 @@ def test_legacy_met_regression(tmp_path: Path, case: dict[str, Any]) -> None:
     # Build a temporary config with patched start_range (if provided) and an isolated outfile
     out_path = tmp_path / "out.met"
     patch_start: str | None = case.get("patch_start_range")
-    tmp_cfg = _write_temp_config(cfg_path, tmp_path, patch_start=patch_start, out_path=out_path)
+    patch_source_map: list | None = case.get("patch_source_map")
+    tmp_cfg = _write_temp_config(
+        cfg_path,
+        tmp_path,
+        patch_start=patch_start,
+        patch_source_map=patch_source_map,
+        out_path=out_path
+    )
 
     _run_metforce_with_config(tmp_cfg)
 
