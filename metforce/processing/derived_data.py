@@ -116,7 +116,7 @@ def process_global_data(
                 fraction = parameters[param]["fraction"]
 
                 ghi_aligned, zenith_aligned = ghi.align(zenith, join="inner")
-                cosz = np.cos(np.radians(zenith_aligned.clip(upper=90.0))).clip(min=0.0)
+                cosz = np.cos(np.radians(zenith_aligned.clip(upper=90.0))).clip(lower=0.0)
 
                 bhi = (ghi_aligned * fraction * cosz).clip(lower=0.0)
                 dni = (bhi.where(cosz > 0.0, 0.0) / cosz.where(cosz > 0.0, 1.0)).clip(

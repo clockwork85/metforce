@@ -3,8 +3,6 @@ from typing import List, Tuple
 
 import pandas as pd
 
-from metforce.logger_config import logger
-
 def check_for_missing_dates(metdata: pd.DataFrame, date_range: pd.DatetimeIndex) -> List[datetime.datetime]:
 
     date_range_set = set(date_range)

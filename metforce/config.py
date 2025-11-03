@@ -19,7 +19,7 @@ from metforce.logger_config import logger
 class OutputConfig(BaseModel):
     """Output selection and NetCDF metadata"""
 
-    format: str = Field("met", description="'met' | 'netcdf' | 'both'")
+    format: str = Field("both", description="'met' | 'netcdf' | 'both'")
     title: str | None = None
     institution: str | None = None
     references: str | None = None
@@ -147,7 +147,7 @@ class MetforceConfig(BaseModel):
 
         # If neither parameters nor metfile -> GRIB/NLDAS defaults
         if parameters is None and metfile is None:
-            logger.info("No parameters specified and no metfile; using GRIB defaults")
+            logger.info("No parameters specified and no metfile; using NLDAS2 defaults")
             vals["parameters"] = default_met_grib
             parameters = vals["parameters"]
 

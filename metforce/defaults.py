@@ -27,16 +27,16 @@ default_met = {
 }
 
 default_met_grib = {
-    "pressure": {"source": "grib"},
-    "temperature": {"source": "grib"},
-    "relative_humidity": {"source": "grib"},
-    "wind_speed": {"source": "grib"},
-    "wind_direction": {"source": "grib"},
-    "precipitation": {"source": "grib"},
-    "global_shortwave": {"source": "grib"},
-    "diffuse_shortwave": {"source": "global_20%"},
-    "direct_shortwave": {"source": "global_80%"},
-    "downwelling_lwir": {"source": "grib"},
+    "pressure": {"source": "nldas2"},
+    "temperature": {"source": "nldas2"},
+    "relative_humidity": {"source": "nldas2"},
+    "wind_speed": {"source": "nldas2"},
+    "wind_direction": {"source": "nldas2"},
+    "precipitation": {"source": "nldas2"},
+    "global_shortwave": {"source": "nldas2"},
+    "diffuse_shortwave": {"source": "pvlib_dirindex"},
+    "direct_shortwave": {"source": "pvlib_dirindex"},
+    "downwelling_lwir": {"source": "nldas2"},
     "zenith": {"source": "pvlib"},
     "azimuth": {"source": "pvlib"},
 }

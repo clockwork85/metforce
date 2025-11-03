@@ -16,7 +16,6 @@ Parameters = dict[str, dict[str, Any]]
 _QC_CODE_BY_SOURCE = {
     "met": 1,
     "nldas2": 4,
-    "grib": 4,
     "pvlib": 3,
     "global_fraction": 3,
     "global_coszenith": 3,
@@ -229,7 +228,7 @@ def build_netcdf_dataset(
     if _has_col("visibility"):
         vis = _vals_col("visibility")
         if vis is not None:
-            vis = np.where(np.asarray(vis, float) < 0.0, np.nan)  # negative sentinel -> NaN
+            vis = np.where(np.asarray(vis, float) < 0.0, np.nan, vis)  # negative sentinel -> NaN
             _var("visibility_in_air", vis,
                  {"standard_name": "visibility_in_air", "long_name": "visibility", "units": "m", "cell_methods": "time: mean"})
 
@@ -332,6 +331,7 @@ def write_outputs(
         if header is None or parameters is None:
             raise ValueError("write_outputs: header and parameters are required for legacy '.met' output")
         write_met_data(met_df, str(outfile_met), header=header, parameters=parameters)
+        wrote = True
 
     if output_format in {"netcdf", "both"} and outfile_nc is not None:
         ds = build_netcdf_dataset(
