@@ -4,27 +4,41 @@ import pandas as pd
 from metforce.output import build_netcdf_dataset
 
 def test_qc_flags_base_codes_and_missing():
-    # 3 timestamps hourly, with one NaN in temperature to exercise "9"
+    """Test quality assessment in Phase 3 (attributes, not arrays)."""
+    # 3 timestamps hourly, with one NaN in temperature to exercise missing data
     idx = pd.date_range("2024-01-01 00:00", periods=3, freq="1h", tz="UTC")
-    df = pd.DataFrame({
-        "Press": [1013.0, 1012.5, 1012.0],
-        "Temp":  [20.0,    np.nan,  21.0],
-    }, index=idx)
+    df = pd.DataFrame(
+        {
+            "Press": [1013.0, 1012.5, 1012.0],
+            "Temp": [20.0, np.nan, 21.0],
+        },
+        index=idx,
+    )
 
     params = {
-        "pressure":   {"source": "met"},
-        "temperature":{"source": "nldas2"},
+        "pressure": {"source": "met"},
+        "temperature": {"source": "nldas2"},
     }
 
     ds = build_netcdf_dataset(df, meta={"title": "qc test"}, parameters=params)
 
-    # Base codes
-    assert "qc_flag_air_pressure" in ds
-    assert "qc_flag_air_temperature" in ds
-    assert (ds["qc_flag_air_pressure"].values == 1).all()     # station
-    # temp: base 4 (nldas2), but NaN -> 9 in the middle
-    exp_temp_qc = np.array([4, 9, 4], dtype=np.int8)
-    assert (ds["qc_flag_air_temperature"].values == exp_temp_qc).all()
+    # Phase 3: Quality documented in attributes, not QC arrays
+    # Pressure: complete data
+    assert "quality_assessment" in ds["air_pressure"].attrs
+    assert (
+        ds["air_pressure"].attrs["quality_assessment"]
+        == "All values consistent quality"
+    )
+
+    # Temperature: has missing data (1 NaN out of 3)
+    assert "quality_assessment" in ds["air_temperature"].attrs
+    assert "Data coverage:" in ds["air_temperature"].attrs["quality_assessment"]
+    # Should be 66.7% coverage (2/3 valid)
+    assert "66" in ds["air_temperature"].attrs["quality_assessment"]
+
+    # Phase 3: No QC flag arrays created yet (deferred to Phase 5)
+    assert "qc_flag_air_pressure" not in ds
+    assert "qc_flag_air_temperature" not in ds
 
 def test_coverage_ok_and_min_fraction():
     # 5 timestamps; RH missing in 2/5 -> coverage 0.6; pressure complete -> 1.0
