@@ -24,6 +24,8 @@ _PARAM_TO_CF = {
     "direct_shortwave": "surface_direct_along_beam_shortwave_flux_in_air",
     "diffuse_shortwave": "surface_diffuse_downwelling_shortwave_flux_in_air",
     "downwelling_lwir": "surface_downwelling_longwave_flux_in_air",
+    "zenith": "solar_zenith_angle",
+    "azimuth": "solar_azimuth_angle",
 }
 
 # --- Core coverage set --------------------------------------------------------
@@ -145,7 +147,7 @@ def _add_streamlined_global_attrs(
 def _add_station_provenance(
         ds: xr.Dataset,
         cf_var: str,
-        param_config: dict[str, Any],
+        param_config: Mapping[str, Any],
         merged_metadata: dict[str, Any]
 ) -> None:
     """
@@ -217,7 +219,7 @@ def _generate_station_comment(metadata: dict[str, Any]) -> str:
 def _add_nldas2_provenance(
         ds: xr.Dataset,
         cf_var: str,
-        param_config: dict[str, Any],
+        param_config: Mapping[str, Any],
         merged_metadata: dict[str, Any]
 ) -> None:
     """
@@ -267,7 +269,7 @@ def _add_nldas2_provenance(
 def _add_pvlib_provenance(
         ds: xr.Dataset,
         cf_var: str,
-        param_config: dict[str, Any],
+        param_config: Mapping[str, Any],
         merged_metadata: dict[str, Any],
         dataframes: dict[str, pd.DataFrame] | None = None
 ) -> None:
@@ -368,10 +370,62 @@ def _add_pvlib_provenance(
     _add_quality_assessment(ds, cf_var)
 
 
+def _add_solar_position_provenance(
+    ds: xr.Dataset,
+    cf_var: str,
+    param_config: Mapping[str, Any],
+    merged_metadata: dict[str, Any],
+) -> None:
+    """
+    Add provenance for solar position variables (zenith, azimuth).
+
+    These are geometric calculations from pvlib.solarposition, not
+    irradiance measurements.
+
+    Documents:
+    - Data type (derived)
+    - Method (pvlib.solarposition)
+    - Input requirements (lat, lon, time)
+    - References
+    """
+    ds[cf_var].attrs["source"] = "pvlib"
+    ds[cf_var].attrs["data_type"] = "derived"
+    ds[cf_var].attrs["method"] = "pvlib.solarposition"
+
+    # Auto-generate comment
+    auto_comment = (
+        "Solar position calculated using pvlib.solarposition module. "
+        "Computed from site latitude, longitude, and timestamp."
+    )
+
+    # Merge with user comment
+    user_comment = merged_metadata.get("comment", "")
+    comment_replace = merged_metadata.get("comment_replace")
+
+    if comment_replace:
+        ds[cf_var].attrs["comment"] = comment_replace
+    elif user_comment:
+        ds[cf_var].attrs["comment"] = f"{auto_comment} {user_comment}"
+    else:
+        ds[cf_var].attrs["comment"] = auto_comment
+
+    # References
+    default_ref = "pvlib documentation: https://pvlib-python.readthedocs.io"
+    if merged_metadata.get("references"):
+        ds[cf_var].attrs["references"] = (
+            f"{default_ref}, {merged_metadata['references']}"
+        )
+    else:
+        ds[cf_var].attrs["references"] = default_ref
+
+    # Quality assessment
+    _add_quality_assessment(ds, cf_var)
+
+
 def _add_derived_provenance(
         ds: xr.Dataset,
         cf_var: str,
-        param_config: dict[str, Any],
+        param_config: Mapping[str, Any],
         merged_metadata: dict[str, Any]
 ) -> None:
     """
@@ -588,29 +642,33 @@ def build_netcdf_dataset(
     # Direct normal irradiance handling (existing DNI logic)
     if _has_col("direct_shortwave"):
         direct_vals = _vals_col("direct_shortwave")
-        zenith_vals = _vals_col("solar_zenith")
+        _var("surface_direct_along_beam_shortwave_flux_in_air", direct_vals,
+             {"standard_name": "surface_direct_along_beam_shortwave_flux_in_air",
+              "long_name": "direct beam irradiance",
+              "units": "W m-2", "cell_methods": "time: mean",
+              "comment": "Direct beam values (DNI)"})
 
-        if zenith_vals is not None:
-            # Have zenith: BHI = DNI * cos(zenith)
-            zen_rad = np.deg2rad(zenith_vals)
-            bhi = direct_vals * np.cos(zen_rad)
-            _var("surface_direct_along_beam_shortwave_flux_in_air", bhi,
-                 {"standard_name": "surface_direct_along_beam_shortwave_flux_in_air",
-                  "long_name": "beam horizontal irradiance (BHI)",
-                  "units": "W m-2", "cell_methods": "time: mean",
-                  "comment": "BHI computed as DNI * cos(solar_zenith_angle)"})
+    if _has_col("zenith"):
+        _var(
+            "solar_zenith_angle",
+            _vals_col("zenith"),
+            {
+                "standard_name": "solar_zenith_angle",
+                "long_name": "solar zenith angle",
+                "units": "degree",
+            },
+        )
 
-            _var("surface_direct_along_beam_normal_shortwave_flux_in_air", direct_vals,
-                 {"standard_name": "surface_direct_along_beam_normal_shortwave_flux_in_air",
-                  "long_name": "direct normal irradiance (DNI)",
-                  "units": "W m-2", "cell_methods": "time: mean"})
-        else:
-            # No zenith: assume direct values are DNI
-            _var("surface_direct_along_beam_shortwave_flux_in_air", direct_vals,
-                 {"standard_name": "surface_direct_along_beam_shortwave_flux_in_air",
-                  "long_name": "direct beam irradiance",
-                  "units": "W m-2", "cell_methods": "time: mean",
-                  "comment": "Direct beam values (DNI or BHI depending on source)"})
+    if _has_col("azimuth"):
+        _var(
+            "solar_azimuth_angle",
+            _vals_col("azimuth"),
+            {
+                "standard_name": "solar_azimuth_angle",
+                "long_name": "solar azimuth angle",
+                "units": "degree",
+            },
+        )
 
     # --- Add provenance to variables --------------------------------
     if parameters:
@@ -635,7 +693,11 @@ def build_netcdf_dataset(
                 _add_nldas2_provenance(ds, cf_var, param_config, merged_metadata)
 
             elif source.startswith("pvlib"):
-                _add_pvlib_provenance(ds, cf_var, param_config, merged_metadata, dataframes)
+                if param_name in ("zenith", "azimuth"):
+                    _add_solar_position_provenance(ds, cf_var, param_config, merged_metadata)
+                else:
+                    # irradiance vars
+                    _add_pvlib_provenance(ds, cf_var, param_config, merged_metadata, dataframes)
 
             elif source in ("global_fraction", "global_coszenith", "brunt"):
                 _add_derived_provenance(ds, cf_var, param_config, merged_metadata)

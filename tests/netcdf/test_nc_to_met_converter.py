@@ -84,6 +84,7 @@ def test_nc_to_met_roundtrip(tmp_path: Path):
 
     # -- Step 3: build a baseline MET using the legacy writer from param-named columns
     # Build "internal" frame with parameter names + discrete parts
+    print(f"{legacy_df.keys()=}")
     internal = pd.DataFrame({
         "pressure": legacy_df["Press"].values,
         "temperature": legacy_df["Temp"].values,
@@ -96,6 +97,10 @@ def test_nc_to_met_roundtrip(tmp_path: Path):
         "diffuse_shortwave": legacy_df["Diffuse"].values,
         "downwelling_lwir": legacy_df["LWdwn"].values,
     }, index=idx)
+    internal["visibility"] = -10.0
+    internal["aerosol"] = 10.0
+    for i in range(1, 8):
+        internal[f"cloud{i}"] = 0
     internal["day"] = idx.dayofyear
     internal["hour"] = idx.hour
     internal["minute"] = idx.minute

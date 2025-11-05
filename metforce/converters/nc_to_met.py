@@ -16,16 +16,45 @@ from metforce.defaults import default_col_names
 
 # CF name -> (internal parameter name used by write_met_data, unit back-converter)
 _CF_TO_PARAM: dict[str, tuple[str, callable]] = {
-    "air_pressure": ("pressure",        lambda a: np.asarray(a, dtype=float) / 100.0),  # Pa -> mbar
-    "air_temperature": ("temperature",  lambda a: np.asarray(a, dtype=float)),          # degC
-    "relative_humidity": ("relative_humidity", lambda a: np.asarray(a, dtype=float) * 100.0),  # 0–1 -> %
-    "wind_speed": ("wind_speed",        lambda a: np.asarray(a, dtype=float)),          # m s-1
-    "wind_from_direction": ("wind_direction", lambda a: np.asarray(a, dtype=float)),    # degree
-    "precipitation_amount": ("precipitation", lambda a: np.asarray(a, dtype=float)),    # kg m-2 == mm
-    "surface_downwelling_shortwave_flux_in_air": ("global_shortwave",  lambda a: np.asarray(a, dtype=float)),
-    "surface_direct_along_beam_shortwave_flux_in_air": ("direct_shortwave",  lambda a: np.asarray(a, dtype=float)),
-    "surface_diffuse_downwelling_shortwave_flux_in_air": ("diffuse_shortwave", lambda a: np.asarray(a, dtype=float)),
-    "surface_downwelling_longwave_flux_in_air": ("downwelling_lwir",  lambda a: np.asarray(a, dtype=float)),
+    "air_pressure": (
+        "pressure",
+        lambda a: np.asarray(a, dtype=float) / 100.0,
+    ),  # Pa -> mbar
+    "air_temperature": ("temperature", lambda a: np.asarray(a, dtype=float)),  # degC
+    "relative_humidity": (
+        "relative_humidity",
+        lambda a: np.asarray(a, dtype=float) * 100.0,
+    ),  # 0–1 -> %
+    "wind_speed": ("wind_speed", lambda a: np.asarray(a, dtype=float)),  # m s-1
+    "wind_from_direction": (
+        "wind_direction",
+        lambda a: np.asarray(a, dtype=float),
+    ),  # degree
+    "precipitation_amount": (
+        "precipitation",
+        lambda a: np.asarray(a, dtype=float),
+    ),  # kg m-2 == mm
+    "surface_downwelling_shortwave_flux_in_air": (
+        "global_shortwave",
+        lambda a: np.asarray(a, dtype=float),
+    ),
+    "surface_direct_along_beam_shortwave_flux_in_air": (
+        "direct_shortwave",
+        lambda a: np.asarray(a, dtype=float),
+    ),
+    "surface_diffuse_downwelling_shortwave_flux_in_air": (
+        "diffuse_shortwave",
+        lambda a: np.asarray(a, dtype=float),
+    ),
+    "surface_downwelling_longwave_flux_in_air": (
+        "downwelling_lwir",
+        lambda a: np.asarray(a, dtype=float),
+    ),
+    "solar_zenith_angle": ("zenith", lambda a: np.asarray(a, dtype=float)),
+    "solar_azimuth_angle": (
+        "azimuth",
+        lambda a: np.asarray(a, dtype=float),
+    ),
 }
 
 
@@ -68,6 +97,17 @@ def _met_df_from_dataset(ds: xr.Dataset) -> pd.DataFrame:
             vals = ds[cf_name].values
             df[param] = back_convert(vals)
 
+    # current .met requirements for AdH
+    if "visibility" not in df.columns:
+        df["visibility"] = -10.0
+    if "aerosol" not in df.columns:
+        df["aerosol"] = 10.0
+
+    for i in range(1, 8):
+        col = f"CC{i}"
+        if col not in df.columns:
+            df[col] = 0
+
     # Final column order should match legacy writer expectations
     order = [k for k in default_col_names.keys() if k in df.columns]
     return df[order]
@@ -89,7 +129,9 @@ def convert_nc_to_met(in_nc: str | Path, out_met: str | Path | None = None) -> P
     end   = time[-1].strftime("%Y-%m-%d %H:%M")
     freq  = _infer_freq_str(time)
 
-    location_name = str(ds.attrs.get("title") or "Location")
+    full_title = str(ds.attrs.get("title", "Location"))
+    location_name = full_title.split(" met forcing")[0].split(" Met Data")[0]
+
     lat = float(ds.attrs.get("geospatial_latitude", np.nan))
     lon = float(ds.attrs.get("geospatial_longitude", np.nan))
     elev = float(ds.attrs.get("geospatial_vertical_min",

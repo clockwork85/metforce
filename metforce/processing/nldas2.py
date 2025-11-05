@@ -238,8 +238,9 @@ def pull_nldas2_files(
         local_files = ea.download(granules, str(tmp_path))
     except Exception as e: 
         logger.error(f"Failed to download {granules} to {str(tmp_path)}")
-        logger.exception(e)
-    logger.debug(f"Downloaded {len(local_files)} files to {tmp_path}")
+        raise
+    else:
+        logger.debug(f"Downloaded {len(local_files)} files to {tmp_path}")
 
     # Step 4: parse each file name -> datetime
     for fpath in local_files:
