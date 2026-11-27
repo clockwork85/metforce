@@ -8,7 +8,8 @@ What this file tests:
 Why this matters:
 - disc and erbs take their timestamps as `datetime_or_doy`; passing `times=` made
   them raise TypeError on every call.
-- pvlib's dirint returns zero DNI for every hour when any pressure value is NaN.
+- pvlib's dirint returns zero DNI for every hour when a pressure value in the
+  middle of the series is NaN.
 """
 
 import numpy as np

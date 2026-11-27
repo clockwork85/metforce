@@ -138,13 +138,14 @@ def process_global_data(
             if "direct_shortwave" not in derived or "diffuse_shortwave" not in derived:
                 # Every source frame stores pressure under the internal "pressure"
                 # column in mbar (station keys such as BP_mbar are renamed on load).
-                # pvlib wants Pa, and one NaN zeroes its whole DNI series, so gaps take
-                # the elevation estimate. With no usable pressure, pass None and let
-                # decompose_shortwave estimate from elevation.
+                # pvlib wants Pa, and a NaN pressure can zero DNI beyond its own hour
+                # (a mid-series gap zeroes every hour), so the series is put on the
+                # GHI index and gaps take the elevation estimate. With no usable
+                # pressure, pass None and let decompose_shortwave estimate it.
                 pressure_pa = None
                 p_df = dataframes.get(parameters.get("pressure", {}).get("source"))
                 if p_df is not None and "pressure" in p_df:
-                    measured = 100.0 * p_df["pressure"].astype(float)
+                    measured = 100.0 * p_df["pressure"].astype(float).reindex(ghi.index)
                     if measured.notna().any():
                         gap_fill = (DEFAULT_PRESSURE_PA if elevation is None
                                     else _pressure_from_elevation_pa(elevation))

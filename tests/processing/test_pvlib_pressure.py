@@ -6,8 +6,9 @@ What this file tests:
 2) With no pressure parameter, no source frame, no pressure column or no valid
    values, the split gets None and falls back to its elevation estimate, without
    raising.
-3) Gaps in measured pressure take the elevation estimate, because a single NaN
-   makes pvlib return zero DNI for every hour.
+3) Measured pressure is put on the shortwave index and its gaps take the
+   elevation estimate, because a NaN pressure can make pvlib return zero DNI
+   well beyond its own hour (a mid-series gap zeroes every hour).
 
 Why this matters:
 - Source frames store pressure under the internal "pressure" column. The split
@@ -88,9 +89,18 @@ def test_split_falls_back_when_pressure_entry_is_empty(mocker):
 
 
 def test_station_gaps_take_the_elevation_estimate(mocker):
-    # One NaN would zero pvlib's whole DNI series, so gaps are filled before the call.
+    # A mid-series NaN would zero pvlib's whole DNI series, so gaps are filled first.
     pressure = _captured_pressure(mocker, _params("met"), _frames("met", [1008.0, float("nan"), 1006.0]))
     assert list(pressure) == pytest.approx([100800.0, _pressure_from_elevation_pa(94.0), 100600.0])
+
+
+def test_short_pressure_series_is_filled_on_the_shortwave_index(mocker):
+    # A pressure frame that stops early must not leave NaN for the split to reindex in.
+    frames = _frames(None, None)
+    frames["met"] = pd.DataFrame({"pressure": [1008.0, 1007.0]}, index=IDX[:2])
+    pressure = _captured_pressure(mocker, _params("met"), frames)
+    assert list(pressure.index) == list(IDX)
+    assert list(pressure) == pytest.approx([100800.0, 100700.0, _pressure_from_elevation_pa(94.0)])
 
 
 def test_all_missing_station_pressure_falls_back(mocker):
