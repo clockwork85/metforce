@@ -199,11 +199,12 @@ def test_get_relative_humidity_grib(mocker):
     nearest_mock.value = 0.00763  # Specific humidity (dimensionless)
     mocker.patch('eccodes.codes_grib_find_nearest', return_value=[nearest_mock])
 
-    # Expected relative humidity based on the predefined values
-    expected_relative_humidity = 0.5 * 100.0 # Relative humidity (50%)
+    # Expected relative humidity for 20 °C, 1013.25 mbar and q = 0.00763:
+    # e = q * 101325 Pa / (0.622 + 0.378 q) = 1237.2 Pa, es = 2337.1 Pa, RH = 52.94 %
+    expected_relative_humidity = 52.94
 
     # Call the function with the predefined values
     relative_humidity = get_relative_humidity_grib(gid_list, latitude, longitude)
 
-    # Assert that the returned relative humidity is equal to the expected relative humidity
-    assert relative_humidity == pytest.approx(expected_relative_humidity, 1)  # Tolerance of 1%
+    # A pressure unit error (x10 or /10) moves RH by a factor of ten, far outside 0.1 %
+    assert relative_humidity == pytest.approx(expected_relative_humidity, rel=1e-3)

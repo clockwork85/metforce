@@ -4,6 +4,7 @@ What this file tests:
 1) The NLDAS-2 NetCDF pressure getter returns mbar (hPa), the unit printed in the
    met file's Press column.
 2) The NLDAS GRIB pressure getter returns mbar too.
+3) The met file's Press column is still declared as mbar, the unit both getters target.
 
 Why this matters:
 - Gridded surface pressure arrives in Pa. Readers of the met file (for example a
