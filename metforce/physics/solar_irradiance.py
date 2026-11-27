@@ -92,7 +92,7 @@ def decompose_shortwave(
         out = pv_irr.disc(
             ghi=ghi,
             solar_zenith=zenith,
-            times=times,
+            datetime_or_doy=times,
             pressure=p_pa if p_pa is not None else DEFAULT_PRESSURE_PA,
             min_cos_zenith=min_cos_zenith,
             max_zenith=max_zenith,
@@ -145,7 +145,7 @@ def decompose_shortwave(
             )
 
     elif m == "erbs":
-        out = pv_irr.erbs(ghi=ghi, zenith=zenith, times=times)
+        out = pv_irr.erbs(ghi=ghi, zenith=zenith, datetime_or_doy=times)
         dni = out["dni"].astype(float)
         dhi = out["dhi"].astype(float).fillna(0.0)
 

@@ -6,6 +6,7 @@ import pandas as pd
 from metforce.data_types import Parameters
 from metforce.logger_config import logger
 from metforce.physics.dew_point import dewpoint_from_t_rh
+from metforce.physics.pressure import DEFAULT_PRESSURE_PA, _pressure_from_elevation_pa
 from metforce.physics.solar_irradiance import decompose_shortwave
 
 def process_global_fraction(global_shortwave: pd.Series, fraction: float) -> pd.Series:
@@ -135,11 +136,22 @@ def process_global_data(
         elif src.startswith("pvlib_"):
             method = src.split("_", 1)[1]  # disc|dirint|dirindex|erbs
             if "direct_shortwave" not in derived or "diffuse_shortwave" not in derived:
-                press_key = parameters["pressure"].get("key") or "BP_mbar"
+                # Every source frame stores pressure under the internal "pressure"
+                # column in mbar (station keys such as BP_mbar are renamed on load).
+                # pvlib wants Pa, and a NaN pressure can zero DNI beyond its own hour
+                # (a mid-series gap zeroes every hour), so the series is put on the
+                # GHI index and gaps take the elevation estimate. With no usable
+                # pressure, pass None and let decompose_shortwave estimate it.
                 pressure_pa = None
-                df_met = dataframes.get("MET") or dataframes.get("met")
-                if df_met is not None and press_key in df_met:
-                    pressure_pa = 100.0 * df_met[press_key].astype(float)
+                p_df = dataframes.get(parameters.get("pressure", {}).get("source"))
+                if p_df is not None and "pressure" in p_df:
+                    measured = 100.0 * p_df["pressure"].astype(float).reindex(ghi.index)
+                    if measured.notna().any():
+                        gap_fill = (DEFAULT_PRESSURE_PA if elevation is None
+                                    else _pressure_from_elevation_pa(elevation))
+                        pressure_pa = measured.fillna(gap_fill)
+                if pressure_pa is None:
+                    logger.debug("No measured pressure for the pvlib split; using the elevation estimate")
 
                 temp_c_series = None
                 rh_percent_series = None
