@@ -82,8 +82,9 @@ def get_pressure_grib(gid_list: List, latitude: float, longitude: float) -> floa
     gid = gid_list[GID.SURFACE_PRESSURE.value]
     nearest = eccodes.codes_grib_find_nearest(gid, latitude, longitude)[0]
     pressure_in_Pa = nearest.value
-    pressure_in_kPa = pressure_in_Pa / 1000.0
-    return pressure_in_kPa
+    # The met file's Press column is mbar (hPa); 1 mbar = 100 Pa.
+    pressure_in_mbar = pressure_in_Pa / 100.0
+    return pressure_in_mbar
 
 
 def get_temperature_grib(gid_list: List, latitude: float, longitude: float) -> float:
@@ -99,7 +100,7 @@ def get_relative_humidity_grib(
 ) -> float:
     gid = gid_list[GID.ABOVE_GROUND_SPECIFIC_HUMIDITY.value]
     temperature_celsius = get_temperature_grib(gid_list, latitude, longitude)
-    pressure_Pa = get_pressure_grib(gid_list, latitude, longitude) * 1000.0
+    pressure_Pa = get_pressure_grib(gid_list, latitude, longitude) * 100.0  # mbar -> Pa
     nearest = eccodes.codes_grib_find_nearest(gid, latitude, longitude)[0]
     specific_humidity = nearest.value
     # Saturation vapour pressure in hPa

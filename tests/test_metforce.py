@@ -192,7 +192,7 @@ def test_get_relative_humidity_grib(mocker):
 
     # Mocking the functions get_temperature_grib and get_pressure_grib
     mocker.patch('metforce.processing.grib.get_temperature_grib', return_value=20.0)  # Temperature in Celsius
-    mocker.patch('metforce.processing.grib.get_pressure_grib', return_value=1013.25 / 1000.0)  # Pressure in hPa
+    mocker.patch('metforce.processing.grib.get_pressure_grib', return_value=1013.25)  # Pressure in mbar (hPa)
 
     # Mocking the function eccodes.codes_grib_find_nearest to return a predefined specific humidity
     nearest_mock = MagicMock()
