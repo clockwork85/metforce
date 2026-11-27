@@ -135,11 +135,14 @@ def process_global_data(
         elif src.startswith("pvlib_"):
             method = src.split("_", 1)[1]  # disc|dirint|dirindex|erbs
             if "direct_shortwave" not in derived or "diffuse_shortwave" not in derived:
-                press_key = parameters["pressure"].get("key") or "BP_mbar"
+                # Every source frame stores pressure under the internal "pressure"
+                # column in mbar (station keys such as BP_mbar are renamed on load).
+                # pvlib wants Pa. Without it, decompose_shortwave estimates from elevation.
                 pressure_pa = None
-                df_met = dataframes.get("MET") or dataframes.get("met")
-                if df_met is not None and press_key in df_met:
-                    pressure_pa = 100.0 * df_met[press_key].astype(float)
+                if "pressure" in parameters:
+                    p_df = dataframes.get(parameters["pressure"]["source"])
+                    if p_df is not None and "pressure" in p_df:
+                        pressure_pa = 100.0 * p_df["pressure"].astype(float)
 
                 temp_c_series = None
                 rh_percent_series = None
