@@ -67,6 +67,10 @@ Each data column in the dataset is associated with a specific unit. The followin
 | zenith            | Zenith            | Degrees (°) |
 | azimuth           | Azimuth           | Degrees (°) |
 
+**Pressure in older files.** Until the fix of November 27, 2026, pressure taken from NLDAS-2 (GRIB or NetCDF) was written in
+kilopascals (about 100.8) under the `mbar` heading. Station barometer pressure was always written in mbar. To correct an
+older file whose `Press` values are near 100 instead of near 1000, multiply that column by 10.
+
 ## Column Keys
 
 Some column keys in the dataset are derived while others are static (legacy ADH columns). The following table provides 

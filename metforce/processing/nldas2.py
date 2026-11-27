@@ -79,11 +79,11 @@ def subselect_point(ds: xr.Dataset, lat: float, lon: float) -> xr.Dataset:
 
 def get_pressure_nldas2(ds: xr.Dataset, lat: float, lon: float) -> float:
     """
-    Pressure in Pa → kPa. NetCDF var 'PSurf'.
+    Pressure in Pa → mbar (hPa), the met file's Press unit. NetCDF var 'PSurf'.
     """
     point = subselect_point(ds, lat, lon)
     p_pa = float(point["PSurf"].values)
-    return p_pa / 1000.0  # kPa
+    return p_pa / 100.0  # mbar
 
 def get_temperature_nldas2(ds: xr.Dataset, lat: float, lon: float) -> float:
     """
