@@ -6,6 +6,7 @@ import pandas as pd
 from metforce.data_types import Parameters
 from metforce.logger_config import logger
 from metforce.physics.dew_point import dewpoint_from_t_rh
+from metforce.physics.pressure import DEFAULT_PRESSURE_PA, _pressure_from_elevation_pa
 from metforce.physics.solar_irradiance import decompose_shortwave
 
 def process_global_fraction(global_shortwave: pd.Series, fraction: float) -> pd.Series:
@@ -137,12 +138,19 @@ def process_global_data(
             if "direct_shortwave" not in derived or "diffuse_shortwave" not in derived:
                 # Every source frame stores pressure under the internal "pressure"
                 # column in mbar (station keys such as BP_mbar are renamed on load).
-                # pvlib wants Pa. Without it, decompose_shortwave estimates from elevation.
+                # pvlib wants Pa, and one NaN zeroes its whole DNI series, so gaps take
+                # the elevation estimate. With no usable pressure, pass None and let
+                # decompose_shortwave estimate from elevation.
                 pressure_pa = None
-                if "pressure" in parameters:
-                    p_df = dataframes.get(parameters["pressure"]["source"])
-                    if p_df is not None and "pressure" in p_df:
-                        pressure_pa = 100.0 * p_df["pressure"].astype(float)
+                p_df = dataframes.get(parameters.get("pressure", {}).get("source"))
+                if p_df is not None and "pressure" in p_df:
+                    measured = 100.0 * p_df["pressure"].astype(float)
+                    if measured.notna().any():
+                        gap_fill = (DEFAULT_PRESSURE_PA if elevation is None
+                                    else _pressure_from_elevation_pa(elevation))
+                        pressure_pa = measured.fillna(gap_fill)
+                if pressure_pa is None:
+                    logger.debug("No measured pressure for the pvlib split; using the elevation estimate")
 
                 temp_c_series = None
                 rh_percent_series = None

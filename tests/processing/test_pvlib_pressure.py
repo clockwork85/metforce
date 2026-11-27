@@ -3,8 +3,11 @@
 What this file tests:
 1) The pvlib shortwave split receives the configured source's pressure, converted
    from mbar to Pa, for gridded (NLDAS-2) and station sources alike.
-2) With no pressure parameter or no source frame, the split gets None and falls
-   back to its elevation estimate, without raising.
+2) With no pressure parameter, no source frame, no pressure column or no valid
+   values, the split gets None and falls back to its elevation estimate, without
+   raising.
+3) Gaps in measured pressure take the elevation estimate, because a single NaN
+   makes pvlib return zero DNI for every hour.
 
 Why this matters:
 - Source frames store pressure under the internal "pressure" column. The split
@@ -16,6 +19,7 @@ import pandas as pd
 import pytest
 
 import metforce.processing.derived_data as derived_data
+from metforce.physics.pressure import _pressure_from_elevation_pa
 
 IDX = pd.date_range("2025-06-29 17:00", periods=3, freq="1h", tz="UTC")
 
@@ -69,3 +73,26 @@ def test_split_falls_back_when_source_frame_is_missing(mocker):
     frames = _frames(None, None)
     frames["met"] = None  # the station strategy returns None when no station file is given
     assert _captured_pressure(mocker, _params("met"), frames) is None
+
+
+def test_split_falls_back_when_frame_has_no_pressure_column(mocker):
+    frames = _frames(None, None)
+    frames["met"] = pd.DataFrame({"temperature": [20.0, 21.0, 22.0]}, index=IDX)
+    assert _captured_pressure(mocker, _params("met"), frames) is None
+
+
+def test_split_falls_back_when_pressure_entry_is_empty(mocker):
+    params = _params(None)
+    params["pressure"] = {}  # the shape of default_met before a source is chosen
+    assert _captured_pressure(mocker, params, _frames(None, None)) is None
+
+
+def test_station_gaps_take_the_elevation_estimate(mocker):
+    # One NaN would zero pvlib's whole DNI series, so gaps are filled before the call.
+    pressure = _captured_pressure(mocker, _params("met"), _frames("met", [1008.0, float("nan"), 1006.0]))
+    assert list(pressure) == pytest.approx([100800.0, _pressure_from_elevation_pa(94.0), 100600.0])
+
+
+def test_all_missing_station_pressure_falls_back(mocker):
+    nan = float("nan")
+    assert _captured_pressure(mocker, _params("met"), _frames("met", [nan, nan, nan])) is None
